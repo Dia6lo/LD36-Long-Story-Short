@@ -8,19 +8,34 @@ declare class Renderer {
     private width;
     private height;
     constructor(width: number, height: number);
-    render(sprite: Sprite): void;
+    render(renderObject: RenderObject): void;
+    renderTexture(texture: Texture, x: number, y: number): void;
+    translate(x: number, y: number): void;
+    rotate(angle: number): void;
     private flush();
 }
-declare class Sprite {
-    texture: Texture;
+declare class RenderObject {
+    children: RenderObject[];
+    parent: RenderObject;
+    addChild(container: RenderObject): void;
+    removeChild(container: RenderObject): boolean;
+    render(renderer: Renderer): void;
+}
+declare class Widget extends RenderObject {
     position: Vector2;
-    constructor(texture: Texture);
-    static fromImage(url: string): Sprite;
+    rotation: number;
+    render(renderer: Renderer): void;
 }
 declare class Texture {
     source: HTMLImageElement;
     constructor(source: HTMLImageElement);
     static fromImage(url: string): Texture;
+}
+declare class Sprite extends Widget {
+    texture: Texture;
+    constructor(texture: Texture);
+    static fromImage(url: string): Sprite;
+    render(renderer: Renderer): void;
 }
 declare class Vector2 {
     x: number;
