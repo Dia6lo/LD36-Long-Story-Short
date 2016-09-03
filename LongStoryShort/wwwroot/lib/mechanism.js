@@ -3,6 +3,24 @@ var __extends = (this && this.__extends) || function (d, b) {
     function __() { this.constructor = d; }
     d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
 };
+var Color = (function () {
+    function Color(rgb) {
+        this.rgb = rgb;
+    }
+    Color.prototype.toHex = function () {
+        var hex = this.rgb.toString(16);
+        hex = "000000".substr(0, 6 - hex.length) + hex;
+        return "#" + hex;
+    };
+    Color.fromComponents = function (r, g, b) {
+        return new Color((r << 16) + (g << 8) + b);
+    };
+    Color.black = new Color(0x000000);
+    Color.red = new Color(0xff0000);
+    Color.green = new Color(0x008000);
+    Color.blue = new Color(0x0000ff);
+    return Color;
+}());
 var Mechanism = (function () {
     function Mechanism() {
     }
@@ -37,7 +55,15 @@ var Renderer = (function () {
         this.context.rotate(radians);
     };
     Renderer.prototype.flush = function () {
-        this.context.clearRect(0, 0, this.width, this.height);
+        this.context.save();
+        if (this.backgroundColor) {
+            this.context.fillStyle = this.backgroundColor.toHex();
+            this.context.fillRect(0, 0, this.width, this.height);
+        }
+        else {
+            this.context.clearRect(0, 0, this.width, this.height);
+        }
+        this.context.restore();
     };
     return Renderer;
 }());
@@ -65,7 +91,6 @@ var RenderObject = (function () {
     };
     return RenderObject;
 }());
-///<reference path="RenderObject.ts"/>
 var Widget = (function (_super) {
     __extends(Widget, _super);
     function Widget() {
@@ -94,8 +119,6 @@ var Texture = (function () {
     };
     return Texture;
 }());
-///<reference path="Widget.ts"/>
-///<reference path="Texture.ts"/>
 var Sprite = (function (_super) {
     __extends(Sprite, _super);
     function Sprite(texture) {

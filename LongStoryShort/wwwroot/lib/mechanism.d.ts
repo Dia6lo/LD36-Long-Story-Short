@@ -1,9 +1,20 @@
+declare class Color {
+    private rgb;
+    constructor(rgb: number);
+    toHex(): string;
+    static fromComponents(r: number, g: number, b: number): Color;
+    static black: Color;
+    static red: Color;
+    static green: Color;
+    static blue: Color;
+}
 declare class Mechanism {
     static version: string;
     static helloWorld(): void;
 }
 declare class Renderer {
     view: HTMLCanvasElement;
+    backgroundColor: Color;
     private context;
     private width;
     private height;

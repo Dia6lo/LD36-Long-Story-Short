@@ -6,6 +6,7 @@ class Game {
 
     run(): void {
         this.renderer = new Renderer(800, 600);
+        this.renderer.backgroundColor = new Color(0x1099bb);
         this.sceneManager.open(MainMenu);
         document.body.appendChild(this.renderer.view);
         window.requestAnimationFrame((time) => this.render(time));
@@ -16,5 +17,6 @@ class Game {
         window.requestAnimationFrame((time) => this.render(time));
     }
 }
+
 var game = new Game();
 window.onload = ()=> game.run();
