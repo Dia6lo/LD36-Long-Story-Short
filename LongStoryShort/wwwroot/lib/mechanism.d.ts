@@ -1,3 +1,14 @@
+declare class Application {
+    view: HTMLDivElement;
+    renderer: Renderer;
+    root: RenderObject;
+    fps: number;
+    private time;
+    constructor(width?: number, height?: number);
+    run(): void;
+    private firstRender(time);
+    render(time: number): void;
+}
 declare class Color {
     private rgb;
     constructor(rgb: number);

@@ -3,6 +3,35 @@ var __extends = (this && this.__extends) || function (d, b) {
     function __() { this.constructor = d; }
     d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
 };
+var Application = (function () {
+    function Application(width, height) {
+        if (width === void 0) { width = 800; }
+        if (height === void 0) { height = 600; }
+        this.fps = 0;
+        this.time = 0;
+        this.view = document.createElement("div");
+        this.renderer = new Renderer(width, height);
+        this.view.appendChild(this.renderer.view);
+    }
+    Application.prototype.run = function () {
+        var _this = this;
+        window.requestAnimationFrame(function (time) { return _this.firstRender(time); });
+    };
+    Application.prototype.firstRender = function (time) {
+        this.time = time;
+        this.render(time);
+    };
+    Application.prototype.render = function (time) {
+        var _this = this;
+        var delta = time - this.time;
+        this.fps = (1 / delta) * 1000;
+        if (this.root)
+            this.renderer.render(this.root);
+        this.time = time;
+        window.requestAnimationFrame(function (time) { return _this.render(time); });
+    };
+    return Application;
+}());
 var Color = (function () {
     function Color(rgb) {
         this.rgb = rgb;
