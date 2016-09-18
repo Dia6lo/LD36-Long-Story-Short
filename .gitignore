@@ -244,3 +244,4 @@ ModelManifest.xml
 # FAKE - F# Make
 .fake/
 LongStoryShort/wwwroot/app/
+LongStoryShort/wwwroot/lib/mechanism.js.map
