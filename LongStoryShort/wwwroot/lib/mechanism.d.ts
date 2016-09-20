@@ -1,9 +1,19 @@
+declare class FinalAnimationAction {
+    animation: string;
+    frame: number;
+    constructor(frame?: number, animation?: string);
+}
 declare class Animation {
     private animators;
     private currentFrame;
-    run(): void;
+    finalAction: FinalAnimationAction;
+    frameCount: number;
+    constructor(frameCount: number);
+    run(frame?: number): void;
     setAnimator(animator: Animator): void;
-    advance(frameCount: number, object: RenderObject): void;
+    advance(frameCount: number, object: RenderObject): FinalAnimationAction;
+    static loop(frame?: number): FinalAnimationAction;
+    static goto(frame: number, animation: string): FinalAnimationAction;
 }
 declare class AnimationCollection {
     private animations;
@@ -29,20 +39,11 @@ declare class KeyFrame<T> {
 declare class GenericAnimator<TObject extends RenderObject, TValue> extends Animator {
     frames: KeyFrame<TValue>[];
     private name;
-    private applyFunc;
-    private interpolateFunc;
-    constructor(name: string, applyFunc: (target: TObject, value: TValue) => void, interpolateFunc: (amount: number, from: TValue, to: TValue, interpolation: Interpolation) => TValue);
+    constructor(name: string);
     setFrame(frame: number, value: TValue, interpolation?: Interpolation): void;
     applyValue(object: TObject, value: any): void;
     getName(): string;
     interpolate(amount: number, from: any, to: any, interpolation: Interpolation): any;
-}
-declare abstract class PropertyAnimatorFactory<TObject extends RenderObject, TValue> {
-    private name;
-    private applyFunc;
-    constructor(name: string, applyFunc: (target: TObject, value: TValue) => void);
-    create(): GenericAnimator<TObject, TValue>;
-    protected abstract interpolate(amount: number, from: TValue, to: TValue, interpolation: Interpolation): TValue;
 }
 declare class Vector2Mutator {
     private origin;
@@ -68,11 +69,11 @@ declare class Vector2 {
     static half: Vector2;
     static one: Vector2;
 }
-declare class Vector2Animator<T extends RenderObject> extends PropertyAnimatorFactory<T, Vector2> {
-    protected interpolate(amount: number, from: Vector2, to: Vector2, interpolation: Interpolation): Vector2;
+declare class Vector2Animator<T extends RenderObject> extends GenericAnimator<T, Vector2> {
+    interpolate(amount: number, from: Vector2, to: Vector2, interpolation: Interpolation): Vector2;
 }
-declare class NumberAnimator<T extends RenderObject> extends PropertyAnimatorFactory<T, number> {
-    protected interpolate(amount: number, from: number, to: number, interpolation: Interpolation): number;
+declare class NumberAnimator<T extends RenderObject> extends GenericAnimator<T, number> {
+    interpolate(amount: number, from: number, to: number, interpolation: Interpolation): number;
 }
 declare class VectorGraphics {
     private canvas;
@@ -97,10 +98,19 @@ declare class Renderer {
     clip(x: number, y: number, width: number, height: number): void;
     flush(): void;
 }
+declare class AudioPlayer {
+    view: HTMLDivElement;
+    private audioElements;
+    private freeAudioElements;
+    constructor();
+    play(source: string, loop?: boolean): void;
+    private getFreeAudioElements();
+}
 declare class Application {
     view: HTMLDivElement;
     renderer: Renderer;
     root: RenderObject;
+    audio: AudioPlayer;
     fps: number;
     private time;
     constructor(width?: number, height?: number);
@@ -146,7 +156,7 @@ declare class RenderObject {
     beforeRender(renderer: Renderer): void;
     afterRender(renderer: Renderer): void;
     update(): void;
-    runAnimation(name: string): void;
+    runAnimation(name: string, frame?: number): void;
     runChildAnimation(name: string): void;
 }
 declare class Widget extends RenderObject {
@@ -160,10 +170,10 @@ declare class Widget extends RenderObject {
     width: number;
     height: number;
     addChild(widget: Widget): void;
-    static positionAnimator: Vector2Animator<Widget>;
-    static scaleAnimator: Vector2Animator<Widget>;
-    static pivotAnimator: Vector2Animator<Widget>;
-    static rotationAnimator: NumberAnimator<Widget>;
+    static positionAnimator: () => Vector2Animator<RenderObject>;
+    static scaleAnimator: () => Vector2Animator<RenderObject>;
+    static pivotAnimator: () => Vector2Animator<RenderObject>;
+    static rotationAnimator: () => NumberAnimator<RenderObject>;
 }
 declare class Texture {
     source: HTMLImageElement;
@@ -179,4 +189,5 @@ declare class Sprite extends Widget {
     render(renderer: Renderer): void;
     width: number;
     height: number;
+    static textureAnimator: () => GenericAnimator<Sprite, Texture>;
 }

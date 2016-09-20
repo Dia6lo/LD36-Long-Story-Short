@@ -3,13 +3,24 @@ var __extends = (this && this.__extends) || function (d, b) {
     function __() { this.constructor = d; }
     d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
 };
+var FinalAnimationAction = (function () {
+    function FinalAnimationAction(frame, animation) {
+        if (frame === void 0) { frame = 0; }
+        if (animation === void 0) { animation = undefined; }
+        this.animation = animation;
+        this.frame = frame;
+    }
+    return FinalAnimationAction;
+}());
 var Animation = (function () {
-    function Animation() {
+    function Animation(frameCount) {
         this.animators = {};
         this.currentFrame = 0;
+        this.frameCount = frameCount;
     }
-    Animation.prototype.run = function () {
-        this.currentFrame = 0;
+    Animation.prototype.run = function (frame) {
+        if (frame === void 0) { frame = 0; }
+        this.currentFrame = frame;
     };
     Animation.prototype.setAnimator = function (animator) {
         this.animators[animator.getName()] = animator;
@@ -23,6 +34,17 @@ var Animation = (function () {
             }
         }
         this.currentFrame = nextFrame;
+        if (this.frameCount === nextFrame)
+            return this.finalAction;
+        return undefined;
+    };
+    Animation.loop = function (frame) {
+        if (frame === void 0) { frame = 0; }
+        return new FinalAnimationAction(frame);
+    };
+    Animation.goto = function (frame, animation) {
+        if (frame === void 0) { frame = 0; }
+        return new FinalAnimationAction(frame, animation);
     };
     return Animation;
 }());
@@ -53,14 +75,14 @@ var Animator = (function () {
     }
     Animator.prototype.apply = function (object, frame) {
         var lastFrame = this.frames.lastOrDefault(function (element, index) { return index <= frame; });
-        if (lastFrame === undefined || lastFrame === null)
+        if (!lastFrame)
             return;
         if (lastFrame.interpolation === Interpolation.None) {
             this.applyValue(object, lastFrame.value);
             return;
         }
         var nextFrame = this.frames.firstOrDefault(function (element, index) { return index > frame; });
-        if (nextFrame === undefined || nextFrame === null) {
+        if (!nextFrame) {
             this.applyValue(object, lastFrame.value);
             return;
         }
@@ -82,38 +104,26 @@ var KeyFrame = (function () {
 }());
 var GenericAnimator = (function (_super) {
     __extends(GenericAnimator, _super);
-    function GenericAnimator(name, applyFunc, interpolateFunc) {
+    function GenericAnimator(name) {
         _super.call(this);
         this.frames = [];
         this.name = name;
-        this.applyFunc = applyFunc;
-        this.interpolateFunc = interpolateFunc;
     }
     GenericAnimator.prototype.setFrame = function (frame, value, interpolation) {
         if (interpolation === void 0) { interpolation = Interpolation.None; }
         this.frames[frame] = new KeyFrame(value, interpolation);
     };
     GenericAnimator.prototype.applyValue = function (object, value) {
-        this.applyFunc(object, value);
+        object[this.name] = value;
     };
     GenericAnimator.prototype.getName = function () {
         return this.name;
     };
     GenericAnimator.prototype.interpolate = function (amount, from, to, interpolation) {
-        return this.interpolateFunc(amount, from, to, interpolation);
+        return from;
     };
     return GenericAnimator;
 }(Animator));
-var PropertyAnimatorFactory = (function () {
-    function PropertyAnimatorFactory(name, applyFunc) {
-        this.name = name;
-        this.applyFunc = applyFunc;
-    }
-    PropertyAnimatorFactory.prototype.create = function () {
-        return new GenericAnimator(this.name, this.applyFunc, this.interpolate);
-    };
-    return PropertyAnimatorFactory;
-}());
 var Vector2Mutator = (function () {
     function Vector2Mutator(vector) {
         this.origin = vector;
@@ -214,7 +224,7 @@ var Vector2Animator = (function (_super) {
         }
     };
     return Vector2Animator;
-}(PropertyAnimatorFactory));
+}(GenericAnimator));
 var NumberAnimator = (function (_super) {
     __extends(NumberAnimator, _super);
     function NumberAnimator() {
@@ -229,7 +239,7 @@ var NumberAnimator = (function (_super) {
         }
     };
     return NumberAnimator;
-}(PropertyAnimatorFactory));
+}(GenericAnimator));
 var VectorGraphics = (function () {
     function VectorGraphics(canvas) {
         this.canvas = canvas;
@@ -314,6 +324,33 @@ var Renderer = (function () {
     };
     return Renderer;
 }());
+var AudioPlayer = (function () {
+    function AudioPlayer() {
+        this.audioElements = [];
+        this.freeAudioElements = [];
+        this.view = document.createElement("div");
+    }
+    AudioPlayer.prototype.play = function (source, loop) {
+        if (loop === void 0) { loop = false; }
+        var audioElement;
+        if (this.freeAudioElements.length === 0)
+            this.freeAudioElements = this.getFreeAudioElements();
+        if (this.freeAudioElements.length === 0) {
+            audioElement = document.createElement("audio");
+            this.view.appendChild(audioElement);
+        }
+        else {
+            audioElement = this.freeAudioElements.pop();
+        }
+        audioElement.src = source;
+        audioElement.loop = loop;
+        audioElement.play();
+    };
+    AudioPlayer.prototype.getFreeAudioElements = function () {
+        return this.audioElements.filter(function (value) { return value.paused; });
+    };
+    return AudioPlayer;
+}());
 var Application = (function () {
     function Application(width, height) {
         if (width === void 0) { width = 800; }
@@ -322,6 +359,8 @@ var Application = (function () {
         this.view = document.createElement("div");
         this.renderer = new Renderer(width, height);
         this.view.appendChild(this.renderer.view);
+        this.audio = new AudioPlayer();
+        this.view.appendChild(this.audio.view);
     }
     Application.prototype.run = function () {
         var _this = this;
@@ -458,11 +497,23 @@ var RenderObject = (function () {
     RenderObject.prototype.beforeRender = function (renderer) { };
     RenderObject.prototype.afterRender = function (renderer) { };
     RenderObject.prototype.update = function () {
-        this.currentAnimation.advance(1, this);
+        if (this.currentAnimation) {
+            var goto = this.currentAnimation.advance(1, this);
+            if (goto) {
+                if (goto.animation)
+                    this.runAnimation(goto.animation, goto.frame);
+                this.currentAnimation.run(goto.frame);
+            }
+        }
+        for (var _i = 0, _a = this.children; _i < _a.length; _i++) {
+            var child = _a[_i];
+            child.update();
+        }
     };
-    RenderObject.prototype.runAnimation = function (name) {
+    RenderObject.prototype.runAnimation = function (name, frame) {
+        if (frame === void 0) { frame = 0; }
         this.currentAnimation = this.animations.get(name);
-        this.currentAnimation.run();
+        this.currentAnimation.run(frame);
     };
     RenderObject.prototype.runChildAnimation = function (name) {
         throw new NotImplementedError();
@@ -506,10 +557,10 @@ var Widget = (function (_super) {
     Widget.prototype.addChild = function (widget) {
         _super.prototype.addChild.call(this, widget);
     };
-    Widget.positionAnimator = new Vector2Animator("position", function (t, v) { return t.position = v; });
-    Widget.scaleAnimator = new Vector2Animator("scale", function (t, v) { return t.scale = v; });
-    Widget.pivotAnimator = new Vector2Animator("pivot", function (t, v) { return t.pivot = v; });
-    Widget.rotationAnimator = new NumberAnimator("rotation", function (t, v) { return t.rotation = v; });
+    Widget.positionAnimator = function () { return new Vector2Animator("position"); };
+    Widget.scaleAnimator = function () { return new Vector2Animator("scale"); };
+    Widget.pivotAnimator = function () { return new Vector2Animator("pivot"); };
+    Widget.rotationAnimator = function () { return new NumberAnimator("rotation"); };
     return Widget;
 }(RenderObject));
 var Texture = (function () {
@@ -548,7 +599,7 @@ var Sprite = (function (_super) {
         return new Sprite(Texture.fromImage(url));
     };
     Sprite.prototype.render = function (renderer) {
-        renderer.renderTexture(this.texture, this.position.x, this.position.y);
+        renderer.renderTexture(this.texture, 0, 0);
         _super.prototype.render.call(this, renderer);
     };
     Object.defineProperty(Sprite.prototype, "width", {
@@ -565,6 +616,7 @@ var Sprite = (function (_super) {
         enumerable: true,
         configurable: true
     });
+    Sprite.textureAnimator = function () { return new GenericAnimator("texture"); };
     return Sprite;
 }(Widget));
 //# sourceMappingURL=mechanism.js.map
