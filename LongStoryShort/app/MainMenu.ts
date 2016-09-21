@@ -3,13 +3,12 @@
 class MainMenu extends Scene {
     constructor() {
         super();
-        this.root = Sprite.fromImage("assets/MainMenu.png");
+        const bg = Sprite.fromImage("assets/MainMenu.png");
+        bg.size = new Vector2(800, 600);
+        this.root = bg;
         const caveMan = new CaveMan();
         caveMan.sprite.position = new Vector2(25, 250);
         this.root.addChild(caveMan.sprite);
-        game.audio.play("assets/GF.mp3");
-        game.audio.play("assets/GF.mp3");
-        game.audio.play("assets/GF.mp3");
         game.audio.play("assets/GF.mp3");
     }
 }

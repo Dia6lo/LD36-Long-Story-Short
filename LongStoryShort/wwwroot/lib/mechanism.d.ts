@@ -89,7 +89,8 @@ declare class Renderer {
     width: number;
     height: number;
     render(renderObject: RenderObject): void;
-    renderTexture(texture: Texture, x: number, y: number): void;
+    renderTexture(texture: Texture, x?: number, y?: number, width?: number, height?: number): void;
+    private renderUndefinedTexture(x?, y?, width?, height?);
     translate(x: number, y: number): void;
     rotate(angle: number): void;
     scale(x: number, y: number): void;
@@ -165,29 +166,31 @@ declare class Widget extends RenderObject {
     scale: Vector2;
     rotation: number;
     pivot: Vector2;
+    size: Vector2;
     beforeRender(renderer: Renderer): void;
     afterRender(renderer: Renderer): void;
+    x: number;
+    y: number;
     width: number;
     height: number;
     addChild(widget: Widget): void;
     static positionAnimator: () => Vector2Animator<RenderObject>;
     static scaleAnimator: () => Vector2Animator<RenderObject>;
     static pivotAnimator: () => Vector2Animator<RenderObject>;
+    static sizeAnimator: () => Vector2Animator<RenderObject>;
     static rotationAnimator: () => NumberAnimator<RenderObject>;
 }
 declare class Texture {
     source: HTMLImageElement;
-    constructor(source: HTMLImageElement);
+    constructor(source?: HTMLImageElement);
     static fromImage(url: string): Texture;
     width: number;
     height: number;
 }
 declare class Sprite extends Widget {
     texture: Texture;
-    constructor(texture: Texture);
+    constructor(texture?: Texture);
     static fromImage(url: string): Sprite;
     render(renderer: Renderer): void;
-    width: number;
-    height: number;
     static textureAnimator: () => GenericAnimator<Sprite, Texture>;
 }

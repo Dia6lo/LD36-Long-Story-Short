@@ -287,8 +287,26 @@ var Renderer = (function () {
         renderObject.render(this);
         renderObject.afterRender(this);
     };
-    Renderer.prototype.renderTexture = function (texture, x, y) {
-        this.context.drawImage(texture.source, x, y);
+    Renderer.prototype.renderTexture = function (texture, x, y, width, height) {
+        if (x === void 0) { x = 0; }
+        if (y === void 0) { y = 0; }
+        if (texture && texture.source)
+            this.context.drawImage(texture.source, x, y, width, height);
+        else
+            this.renderUndefinedTexture(x, y, width, height);
+    };
+    Renderer.prototype.renderUndefinedTexture = function (x, y, width, height) {
+        if (x === void 0) { x = 0; }
+        if (y === void 0) { y = 0; }
+        var image = new Image();
+        image.src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAkAAAAJCAIAAABv85FHAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAG0lEQVQI12O4yTDl////WEkGXBL///9nGAb6AKuosf7WkzVAAAAAAElFTkSuQmCC";
+        var ctx = this.context;
+        var smoothings = [ctx.mozImageSmoothingEnabled, ctx.webkitImageSmoothingEnabled,
+            ctx.msImageSmoothingEnabled, ctx.imageSmoothingEnabled];
+        ctx.mozImageSmoothingEnabled = ctx.webkitImageSmoothingEnabled =
+            ctx.msImageSmoothingEnabled = ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(image, x, y, width, height);
+        ctx.mozImageSmoothingEnabled = smoothings[0], ctx.webkitImageSmoothingEnabled = smoothings[1], ctx.msImageSmoothingEnabled = smoothings[2], ctx.imageSmoothingEnabled = smoothings[3];
     };
     Renderer.prototype.translate = function (x, y) {
         this.context.translate(x, y);
@@ -529,6 +547,7 @@ var Widget = (function (_super) {
         this.scale = Vector2.one;
         this.rotation = 0;
         this.pivot = Vector2.zero;
+        this.size = new Vector2(100, 100);
     }
     Widget.prototype.beforeRender = function (renderer) {
         renderer.save();
@@ -540,16 +559,42 @@ var Widget = (function (_super) {
     Widget.prototype.afterRender = function (renderer) {
         renderer.restore();
     };
+    Object.defineProperty(Widget.prototype, "x", {
+        get: function () {
+            return this.position.x;
+        },
+        set: function (value) {
+            this.position.x = value;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(Widget.prototype, "y", {
+        get: function () {
+            return this.position.y;
+        },
+        set: function (value) {
+            this.position.y = value;
+        },
+        enumerable: true,
+        configurable: true
+    });
     Object.defineProperty(Widget.prototype, "width", {
         get: function () {
-            return 100;
+            return this.size.x;
+        },
+        set: function (value) {
+            this.size.x = value;
         },
         enumerable: true,
         configurable: true
     });
     Object.defineProperty(Widget.prototype, "height", {
         get: function () {
-            return 100;
+            return this.size.y;
+        },
+        set: function (value) {
+            this.size.y = value;
         },
         enumerable: true,
         configurable: true
@@ -560,11 +605,13 @@ var Widget = (function (_super) {
     Widget.positionAnimator = function () { return new Vector2Animator("position"); };
     Widget.scaleAnimator = function () { return new Vector2Animator("scale"); };
     Widget.pivotAnimator = function () { return new Vector2Animator("pivot"); };
+    Widget.sizeAnimator = function () { return new Vector2Animator("size"); };
     Widget.rotationAnimator = function () { return new NumberAnimator("rotation"); };
     return Widget;
 }(RenderObject));
 var Texture = (function () {
     function Texture(source) {
+        if (source === void 0) { source = undefined; }
         this.source = source;
     }
     Texture.fromImage = function (url) {
@@ -592,6 +639,7 @@ var Texture = (function () {
 var Sprite = (function (_super) {
     __extends(Sprite, _super);
     function Sprite(texture) {
+        if (texture === void 0) { texture = undefined; }
         _super.call(this);
         this.texture = texture;
     }
@@ -599,23 +647,9 @@ var Sprite = (function (_super) {
         return new Sprite(Texture.fromImage(url));
     };
     Sprite.prototype.render = function (renderer) {
-        renderer.renderTexture(this.texture, 0, 0);
+        renderer.renderTexture(this.texture, 0, 0, this.size.x, this.size.y);
         _super.prototype.render.call(this, renderer);
     };
-    Object.defineProperty(Sprite.prototype, "width", {
-        get: function () {
-            return this.texture.width;
-        },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(Sprite.prototype, "height", {
-        get: function () {
-            return this.texture.height;
-        },
-        enumerable: true,
-        configurable: true
-    });
     Sprite.textureAnimator = function () { return new GenericAnimator("texture"); };
     return Sprite;
 }(Widget));

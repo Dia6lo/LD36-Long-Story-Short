@@ -13,5 +13,6 @@
         animation.setAnimator(textureAnimator);
         this.sprite.animations.set("Idle", animation);
         this.sprite.runAnimation("Idle");
+        this.sprite.size = new Vector2(250, 250);
     }
 }
