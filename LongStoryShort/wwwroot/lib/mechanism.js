@@ -246,7 +246,7 @@ var VectorGraphics = (function () {
     }
     VectorGraphics.prototype.drawRect = function (color, x, y, width, height) {
         this.canvas.save();
-        this.canvas.fillStyle = color.toHex();
+        this.canvas.fillStyle = color.toCssHex();
         this.canvas.fillRect(x, y, width, height);
         this.canvas.restore();
         return this;
@@ -332,7 +332,7 @@ var Renderer = (function () {
     Renderer.prototype.flush = function () {
         this.context.save();
         if (this.backgroundColor) {
-            this.context.fillStyle = this.backgroundColor.toHex();
+            this.context.fillStyle = this.backgroundColor.toCssHex();
             this.context.fillRect(0, 0, this.width, this.height);
         }
         else {
@@ -401,21 +401,194 @@ var Application = (function () {
     return Application;
 }());
 var Color = (function () {
-    function Color(rgb) {
-        this.rgb = rgb;
+    function Color(color) {
+        if (typeof color === "number") {
+            this.hex = color.toString(16);
+        }
+        else {
+            this.hex = color;
+        }
     }
+    Object.defineProperty(Color.prototype, "r", {
+        get: function () {
+            return parseInt(this.hex.substring(0, 2), 16);
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(Color.prototype, "g", {
+        get: function () {
+            return parseInt(this.hex.substring(2, 4), 16);
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(Color.prototype, "b", {
+        get: function () {
+            return parseInt(this.hex.substring(4, 6), 16);
+        },
+        enumerable: true,
+        configurable: true
+    });
     Color.prototype.toHex = function () {
-        var hex = this.rgb.toString(16);
-        hex = "000000".substr(0, 6 - hex.length) + hex;
+        return this.hex;
+    };
+    Color.prototype.toCssHex = function () {
+        var hex = "000000".substr(0, 6 - this.hex.length) + this.hex;
         return "#" + hex;
+    };
+    Color.prototype.toInt = function () {
+        return parseInt(this.hex, 16);
     };
     Color.fromComponents = function (r, g, b) {
         return new Color((r << 16) + (g << 8) + b);
     };
     Color.black = new Color(0x000000);
+    Color.silver = new Color(0xc0c0c0);
+    Color.gray = new Color(0x808080);
+    Color.white = new Color(0xffffff);
+    Color.maroon = new Color(0x800000);
     Color.red = new Color(0xff0000);
+    Color.purple = new Color(0x800080);
+    Color.fuchsia = new Color(0xff00ff);
     Color.green = new Color(0x008000);
+    Color.lime = new Color(0x00ff00);
+    Color.olive = new Color(0x808000);
+    Color.yellow = new Color(0xffff00);
+    Color.navy = new Color(0x000080);
     Color.blue = new Color(0x0000ff);
+    Color.teal = new Color(0x008080);
+    Color.aqua = new Color(0x00ffff);
+    Color.orange = new Color(0xffa500);
+    Color.aliceblue = new Color(0xf0f8ff);
+    Color.antiquewhite = new Color(0xfaebd7);
+    Color.aquamarine = new Color(0x7fffd4);
+    Color.azure = new Color(0xf0ffff);
+    Color.beige = new Color(0xf5f5dc);
+    Color.bisque = new Color(0xffe4c4);
+    Color.blanchedalmond = new Color(0xffebcd);
+    Color.blueviolet = new Color(0x8a2be2);
+    Color.brown = new Color(0xa52a2a);
+    Color.burlywood = new Color(0xdeb887);
+    Color.cadetblue = new Color(0x5f9ea0);
+    Color.chartreuse = new Color(0x7fff00);
+    Color.chocolate = new Color(0xd2691e);
+    Color.coral = new Color(0xff7f50);
+    Color.cornflowerblue = new Color(0x6495ed);
+    Color.cornsilk = new Color(0xfff8dc);
+    Color.crimson = new Color(0xdc143c);
+    Color.darkblue = new Color(0x00008b);
+    Color.darkcyan = new Color(0x008b8b);
+    Color.darkgoldenrod = new Color(0xb8860b);
+    Color.darkgray = new Color(0xa9a9a9);
+    Color.darkgreen = new Color(0x006400);
+    Color.darkgrey = new Color(0xa9a9a9);
+    Color.darkkhaki = new Color(0xbdb76b);
+    Color.darkmagenta = new Color(0x8b008b);
+    Color.darkolivegreen = new Color(0x556b2f);
+    Color.darkorange = new Color(0xff8c00);
+    Color.darkorchid = new Color(0x9932cc);
+    Color.darkred = new Color(0x8b0000);
+    Color.darksalmon = new Color(0xe9967a);
+    Color.darkseagreen = new Color(0x8fbc8f);
+    Color.darkslateblue = new Color(0x483d8b);
+    Color.darkslategray = new Color(0x2f4f4f);
+    Color.darkslategrey = new Color(0x2f4f4f);
+    Color.darkturquoise = new Color(0x00ced1);
+    Color.darkviolet = new Color(0x9400d3);
+    Color.deeppink = new Color(0xff1493);
+    Color.deepskyblue = new Color(0x00bfff);
+    Color.dimgray = new Color(0x696969);
+    Color.dimgrey = new Color(0x696969);
+    Color.dodgerblue = new Color(0x1e90ff);
+    Color.firebrick = new Color(0xb22222);
+    Color.floralwhite = new Color(0xfffaf0);
+    Color.forestgreen = new Color(0x228b22);
+    Color.gainsboro = new Color(0xdcdcdc);
+    Color.ghostwhite = new Color(0xf8f8ff);
+    Color.gold = new Color(0xffd700);
+    Color.goldenrod = new Color(0xdaa520);
+    Color.greenyellow = new Color(0xadff2f);
+    Color.grey = new Color(0x808080);
+    Color.honeydew = new Color(0xf0fff0);
+    Color.hotpink = new Color(0xff69b4);
+    Color.indianred = new Color(0xcd5c5c);
+    Color.indigo = new Color(0x4b0082);
+    Color.ivory = new Color(0xfffff0);
+    Color.khaki = new Color(0xf0e68c);
+    Color.lavender = new Color(0xe6e6fa);
+    Color.lavenderblush = new Color(0xfff0f5);
+    Color.lawngreen = new Color(0x7cfc00);
+    Color.lemonchiffon = new Color(0xfffacd);
+    Color.lightblue = new Color(0xadd8e6);
+    Color.lightcoral = new Color(0xf08080);
+    Color.lightcyan = new Color(0xe0ffff);
+    Color.lightgoldenrodyellow = new Color(0xfafad2);
+    Color.lightgray = new Color(0xd3d3d3);
+    Color.lightgreen = new Color(0x90ee90);
+    Color.lightgrey = new Color(0xd3d3d3);
+    Color.lightpink = new Color(0xffb6c1);
+    Color.lightsalmon = new Color(0xffa07a);
+    Color.lightseagreen = new Color(0x20b2aa);
+    Color.lightskyblue = new Color(0x87cefa);
+    Color.lightslategray = new Color(0x778899);
+    Color.lightslategrey = new Color(0x778899);
+    Color.lightsteelblue = new Color(0xb0c4de);
+    Color.lightyellow = new Color(0xffffe0);
+    Color.limegreen = new Color(0x32cd32);
+    Color.linen = new Color(0xfaf0e6);
+    Color.mediumaquamarine = new Color(0x66cdaa);
+    Color.mediumblue = new Color(0x0000cd);
+    Color.mediumorchid = new Color(0xba55d3);
+    Color.mediumpurple = new Color(0x9370db);
+    Color.mediumseagreen = new Color(0x3cb371);
+    Color.mediumslateblue = new Color(0x7b68ee);
+    Color.mediumspringgreen = new Color(0x00fa9a);
+    Color.mediumturquoise = new Color(0x48d1cc);
+    Color.mediumvioletred = new Color(0xc71585);
+    Color.midnightblue = new Color(0x191970);
+    Color.mintcream = new Color(0xf5fffa);
+    Color.mistyrose = new Color(0xffe4e1);
+    Color.moccasin = new Color(0xffe4b5);
+    Color.navajowhite = new Color(0xffdead);
+    Color.oldlace = new Color(0xfdf5e6);
+    Color.olivedrab = new Color(0x6b8e23);
+    Color.orangered = new Color(0xff4500);
+    Color.orchid = new Color(0xda70d6);
+    Color.palegoldenrod = new Color(0xeee8aa);
+    Color.palegreen = new Color(0x98fb98);
+    Color.paleturquoise = new Color(0xafeeee);
+    Color.palevioletred = new Color(0xdb7093);
+    Color.papayawhip = new Color(0xffefd5);
+    Color.peachpuff = new Color(0xffdab9);
+    Color.peru = new Color(0xcd853f);
+    Color.pink = new Color(0xffc0cb);
+    Color.plum = new Color(0xdda0dd);
+    Color.powderblue = new Color(0xb0e0e6);
+    Color.rosybrown = new Color(0xbc8f8f);
+    Color.royalblue = new Color(0x4169e1);
+    Color.saddlebrown = new Color(0x8b4513);
+    Color.salmon = new Color(0xfa8072);
+    Color.sandybrown = new Color(0xf4a460);
+    Color.seagreen = new Color(0x2e8b57);
+    Color.seashell = new Color(0xfff5ee);
+    Color.sienna = new Color(0xa0522d);
+    Color.skyblue = new Color(0x87ceeb);
+    Color.slateblue = new Color(0x6a5acd);
+    Color.slategray = new Color(0x708090);
+    Color.slategrey = new Color(0x708090);
+    Color.snow = new Color(0xfffafa);
+    Color.springgreen = new Color(0x00ff7f);
+    Color.steelblue = new Color(0x4682b4);
+    Color.tan = new Color(0xd2b48c);
+    Color.thistle = new Color(0xd8bfd8);
+    Color.tomato = new Color(0xff6347);
+    Color.turquoise = new Color(0x40e0d0);
+    Color.violet = new Color(0xee82ee);
+    Color.wheat = new Color(0xf5deb3);
+    Color.whitesmoke = new Color(0xf5f5f5);
+    Color.yellowgreen = new Color(0x9acd32);
+    Color.rebeccapurple = new Color(0xffa500);
     return Color;
 }());
 if (!Array.prototype.last) {
@@ -618,6 +791,7 @@ var Texture = (function () {
         var image = new Image();
         var texture = new Texture(image);
         image.src = url;
+        image.onerror = function () { texture.source = undefined; };
         return texture;
     };
     Object.defineProperty(Texture.prototype, "width", {

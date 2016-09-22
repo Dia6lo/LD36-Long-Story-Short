@@ -1,15 +1,15 @@
-﻿class CaveMan {
-    private textures = [0, 1, 2, 3].map((i) => Texture.fromImage(`assets/CaveManMenu${i}.png`));
+﻿class Campfire {
+    private textures = [0, 1, 2, 3].map((i) => Texture.fromImage(`assets/Campfire${i}.png`));
     sprite = new Sprite(this.textures[0]);
 
     constructor() {
-        this.sprite.size = new Vector2(250, 250);
+        this.sprite.size = new Vector2(150, 150);
 
-        const idleAnimation = new Animation(40);
+        const idleAnimation = new Animation(20);
         idleAnimation.finalAction = Animation.loop();
         let textureAnimator = Sprite.textureAnimator();
         textureAnimator.setFrame(0, this.textures[0]);
-        textureAnimator.setFrame(20, this.textures[1]);
+        textureAnimator.setFrame(10, this.textures[1]);
         idleAnimation.setAnimator(textureAnimator);
         this.sprite.animations.set("Idle", idleAnimation);
 

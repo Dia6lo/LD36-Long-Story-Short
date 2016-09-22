@@ -5,7 +5,7 @@ class Game extends Application {
 
     constructor() {
         super();
-        this.renderer.backgroundColor = new Color(0x1099bb);
+        this.renderer.backgroundColor = Color.skyblue;
     }
 
     render(time: number): void {
