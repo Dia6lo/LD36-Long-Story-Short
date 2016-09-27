@@ -1,7 +1,7 @@
 declare class FinalAnimationAction {
-    animation: string;
+    animation?: string;
     frame: number;
-    constructor(frame?: number, animation?: string);
+    constructor(frame: number, animation?: string);
 }
 declare class Animation {
     private animators;
@@ -11,7 +11,7 @@ declare class Animation {
     constructor(frameCount: number);
     run(frame?: number): void;
     setAnimator(animator: Animator): void;
-    advance(frameCount: number, object: RenderObject): FinalAnimationAction;
+    advance(frameCount: number, object: RenderObject): FinalAnimationAction | undefined;
     static loop(frame?: number): FinalAnimationAction;
     static goto(frame: number, animation: string): FinalAnimationAction;
 }
@@ -26,10 +26,11 @@ declare enum Interpolation {
 }
 declare abstract class Animator {
     frames: KeyFrame<any>[];
+    readonly name: string;
+    protected constructor(name: string);
     apply(object: RenderObject, frame: number): void;
     protected abstract applyValue(object: RenderObject, value: any): void;
     protected abstract interpolate(amount: number, from: any, to: any, interpolation: Interpolation): any;
-    abstract getName(): string;
 }
 declare class KeyFrame<T> {
     value: T;
@@ -38,36 +39,35 @@ declare class KeyFrame<T> {
 }
 declare class GenericAnimator<TObject extends RenderObject, TValue> extends Animator {
     frames: KeyFrame<TValue>[];
-    private name;
     constructor(name: string);
     setFrame(frame: number, value: TValue, interpolation?: Interpolation): void;
     applyValue(object: TObject, value: any): void;
-    getName(): string;
     interpolate(amount: number, from: any, to: any, interpolation: Interpolation): any;
 }
 declare class Vector2Mutator {
-    private origin;
+    private readonly origin;
     constructor(vector: Vector2);
     add(value: Vector2 | number): Vector2Mutator;
     subtract(value: Vector2): Vector2Mutator;
     multiply(value: Vector2 | number): Vector2Mutator;
     divide(value: Vector2 | number): Vector2Mutator;
-    private apply(value, func);
+    private apply(value, fn);
 }
 declare class Vector2 {
     x: number;
     y: number;
     constructor(x?: number, y?: number);
+    set(x: number, y: number): void;
     add(value: Vector2 | number): Vector2;
     subtract(value: Vector2 | number): Vector2;
     multiply(value: Vector2 | number): Vector2;
     divide(value: Vector2 | number): Vector2;
-    private combine(value, func);
+    private combine(value, fn);
     clone(): Vector2;
     mutate(): Vector2Mutator;
-    static zero: Vector2;
-    static half: Vector2;
-    static one: Vector2;
+    static readonly zero: Vector2;
+    static readonly half: Vector2;
+    static readonly one: Vector2;
 }
 declare class Vector2Animator<T extends RenderObject> extends GenericAnimator<T, Vector2> {
     interpolate(amount: number, from: Vector2, to: Vector2, interpolation: Interpolation): Vector2;
@@ -76,20 +76,27 @@ declare class NumberAnimator<T extends RenderObject> extends GenericAnimator<T, 
     interpolate(amount: number, from: number, to: number, interpolation: Interpolation): number;
 }
 declare class VectorGraphics {
-    private canvas;
+    private readonly canvas;
     constructor(canvas: CanvasRenderingContext2D);
-    drawRect(color: Color, x: number, y: number, width: number, height: number): VectorGraphics;
+    fillStyle(color: Color): VectorGraphics;
+    strokeStyle(lineWidth: number, color?: Color): VectorGraphics;
+    drawRect(x: number, y: number, width: number, height: number): VectorGraphics;
+    drawRoundedRect(x: number, y: number, width: number, height: number, radius: number): VectorGraphics;
 }
 declare class Renderer {
     view: HTMLCanvasElement;
     backgroundColor: Color;
     vectorGraphics: VectorGraphics;
-    private context;
+    private readonly context;
     constructor(width: number, height: number);
     width: number;
     height: number;
+    size: Vector2;
+    imageSmoothing: boolean;
     render(renderObject: RenderObject): void;
-    renderTexture(texture: Texture, x?: number, y?: number, width?: number, height?: number): void;
+    renderTexture(texture?: Texture, x?: number, y?: number, width?: number, height?: number, sx?: number, sy?: number, sWidth?: number, sHeight?: number): void;
+    renderText(text: string, x?: number, y?: number): void;
+    measureText(text: string): number;
     private renderUndefinedTexture(x?, y?, width?, height?);
     translate(x: number, y: number): void;
     rotate(angle: number): void;
@@ -116,14 +123,16 @@ declare class Application {
     private time;
     constructor(width?: number, height?: number);
     run(): void;
-    render(time: number): void;
+    private handleAnimationFrame(time);
+    render(): void;
+    update(delta: number): void;
 }
 declare class Color {
-    private hex;
+    private readonly hex;
     constructor(color: number | string);
-    r: number;
-    g: number;
-    b: number;
+    readonly r: number;
+    readonly g: number;
+    readonly b: number;
     toHex(): string;
     toCssHex(): string;
     toInt(): number;
@@ -275,18 +284,28 @@ declare class Color {
     static yellowgreen: Color;
     static rebeccapurple: Color;
 }
-interface Array<T> {
-    last(filter?: (element: T, index: number) => boolean): T;
-    lastOrDefault(filter?: (element: T, index: number) => boolean): T;
-    first(filter?: (element: T, index: number) => boolean): T;
-    firstOrDefault(filter?: (element: T, index: number) => boolean): T;
+declare class EventObserver<T extends Function> {
+    fn: T;
+    context: any;
+    once: boolean;
+    needRemoval: boolean;
+    constructor(fn: T, context: any, once: boolean);
+    execute(dispatcher: (fn: T) => void): void;
 }
-interface Math {
-    lerp(amount: number, from: number, to: number): number;
+interface IObservableEvent<T extends Function> {
+    subscribe(fn: T, context?: any): void;
+    subscribeOnce(fn: T, context?: any): void;
+    remove(fn: T): void;
+    removeAll(): void;
 }
-declare class Mechanism {
-    static version: string;
-    static helloWorld(): void;
+declare class ObservableEvent<T extends Function> implements IObservableEvent<T> {
+    private observers;
+    dispatch(dispatcher: (fn: T) => void): void;
+    subscribe(fn: T, context?: any): void;
+    subscribeOnce(fn: T, context?: any): void;
+    private addObserver(fn, context, once);
+    remove(fn: T): void;
+    removeAll(): void;
 }
 declare class NotImplementedError implements Error {
     name: string;
@@ -295,15 +314,16 @@ declare class NotImplementedError implements Error {
 }
 declare class RenderObject {
     children: RenderObject[];
-    parent: RenderObject;
+    parent?: RenderObject;
     animations: AnimationCollection;
+    tasks: TaskList;
     private currentAnimation;
     addChild(container: RenderObject): void;
     removeChild(container: RenderObject): boolean;
     render(renderer: Renderer): void;
     beforeRender(renderer: Renderer): void;
     afterRender(renderer: Renderer): void;
-    update(): void;
+    update(delta: number): void;
     runAnimation(name: string, frame?: number): void;
     runChildAnimation(name: string): void;
 }
@@ -327,17 +347,117 @@ declare class Widget extends RenderObject {
     static sizeAnimator: () => Vector2Animator<RenderObject>;
     static rotationAnimator: () => NumberAnimator<RenderObject>;
 }
+declare enum TextAlignment {
+    Start = 0,
+    Center = 1,
+    End = 2,
+}
+declare class Label extends Widget {
+    text?: string;
+    verticalTextAlignment: TextAlignment;
+    horizontalTextAlignment: TextAlignment;
+    constructor(text?: string);
+    render(renderer: Renderer): void;
+}
+interface Array<T> {
+    last(filter?: (element: T, index: number) => boolean): T;
+    lastOrDefault(filter?: (element: T, index: number) => boolean): T;
+    first(filter?: (element: T, index: number) => boolean): T;
+    firstOrDefault(filter?: (element: T, index: number) => boolean): T;
+    any(): boolean;
+}
+interface Math {
+    lerp(amount: number, from: number, to: number): number;
+    clamp(value: number, min: number, max: number): number;
+    HALFPI: number;
+}
+declare class Mechanism {
+    static version: string;
+    static helloWorld(): void;
+}
 declare class Texture {
-    source: HTMLImageElement;
+    source?: HTMLImageElement;
     constructor(source?: HTMLImageElement);
     static fromImage(url: string): Texture;
-    width: number;
-    height: number;
+    readonly size: Vector2;
+    readonly width: number;
+    readonly height: number;
 }
 declare class Sprite extends Widget {
-    texture: Texture;
+    texture?: Texture;
     constructor(texture?: Texture);
     static fromImage(url: string): Sprite;
     render(renderer: Renderer): void;
     static textureAnimator: () => GenericAnimator<Sprite, Texture>;
+}
+declare class Rectangle {
+    min: Vector2;
+    max: Vector2;
+    constructor(min: Vector2, max: Vector2);
+    constructor(left: number, top: number, right: number, bottom: number);
+    readonly left: number;
+    readonly top: number;
+    readonly right: number;
+    readonly bottom: number;
+    readonly width: number;
+    readonly height: number;
+}
+declare class NineGrid extends Widget {
+    texture?: Texture;
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+    constructor(texture?: Texture);
+    render(renderer: Renderer): void;
+    private getParts();
+}
+declare abstract class WaitPredicate {
+    totalTime: number;
+    abstract evaluate(): boolean;
+}
+declare class AnimationWaitPredicate extends WaitPredicate {
+    renderObject: RenderObject;
+    evaluate(): boolean;
+}
+declare class BooleanWaitPredicate extends WaitPredicate {
+    predicate: (totalTime: number) => boolean;
+    evaluate(): boolean;
+}
+declare class TimeWaitPredicate extends WaitPredicate {
+    waitTime: number;
+    evaluate(): boolean;
+}
+declare class TaskWaitPredicate extends WaitPredicate {
+    task: Task;
+    evaluate(): boolean;
+}
+declare class Task {
+    static current?: Task;
+    private iterator?;
+    private waitPredicate?;
+    totalTime: number;
+    delta: number;
+    constructor(iterator: Iterator<WaitPredicate>);
+    readonly completed: boolean;
+    update(delta: number): void;
+    private processWaitPredicate(delta);
+    stop(): void;
+    static sinMotion(timePeriod: number, from: number, to: number): IterableIterator<number>;
+    static sqrtMotion(timePeriod: number, from: number, to: number): IterableIterator<number>;
+    static linearMotion(timePeriod: number, from: number, to: number): IterableIterator<number>;
+    static motion(timePeriod: number, from: number, to: number, fn: (fraction: number) => number): IterableIterator<number>;
+}
+declare class TaskList {
+    static current?: TaskList;
+    private tasks;
+    add(task: Task | Iterator<WaitPredicate>): void;
+    update(delta: number): void;
+}
+declare class Wait {
+    static seconds(seconds: number): TimeWaitPredicate;
+    static frame(): TimeWaitPredicate;
+    static task(task: Iterator<WaitPredicate>): TaskWaitPredicate;
+    static while(predicate: (totalTime: number) => boolean): BooleanWaitPredicate;
+    static animation(renderObject: RenderObject): AnimationWaitPredicate;
 }

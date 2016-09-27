@@ -8,9 +8,10 @@ class Game extends Application {
         this.renderer.backgroundColor = Color.skyblue;
     }
 
-    render(time: number): void {
+    update(delta: number): void {
         this.root = this.sceneManager.currentScene.root;
-        super.render(time);
+        this.sceneManager.currentScene.update(delta);
+        super.update(delta);
     }
 }
 

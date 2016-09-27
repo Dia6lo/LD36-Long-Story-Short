@@ -4,9 +4,10 @@
     "noEmitOnError": true,
     "removeComments": true,
     "sourceMap": true,
-    "target": "es5",
+    "target": "es6",
     "module": "amd",
-    "outFile": "wwwroot/app/app.js"
+    "outFile": "wwwroot/app/app.js",
+    "strictNullChecks": true
   },
   "compileOnSave": true
 }
