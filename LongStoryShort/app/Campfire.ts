@@ -24,8 +24,6 @@
         textureAnimator.setFrame(0, this.textures[3]);
         sadAnimation.setAnimator(textureAnimator);
         this.sprite.animations.set("Sad", sadAnimation);
-
-        this.sprite.runAnimation("Idle");
     }
 
     runIdleAnimation() {

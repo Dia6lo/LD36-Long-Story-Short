@@ -20,6 +20,7 @@
             message.position.y = t;
             yield Wait.frame();
         }
+        message.removeFromParent();
     }
 
     update(delta: number){}

@@ -1,240 +1,335 @@
-class FinalAnimationAction {
-    constructor(frame, animation) {
-        this.animation = animation;
-        this.frame = frame;
+class RenderObject {
+    constructor() {
+        this.children = [];
+        this.animations = new AnimationCollection();
+        this.tasks = new TaskList();
     }
-}
-class Animation {
-    constructor(frameCount) {
-        this.animators = {};
-        this.currentFrame = 0;
-        this.frameCount = frameCount;
+    addChild(container) {
+        this.children.push(container);
+        container.parent = this;
     }
-    run(frame = 0) {
-        this.currentFrame = frame;
+    removeChild(container) {
+        const index = this.children.indexOf(container);
+        if (index === -1)
+            return false;
+        this.children.splice(index, 1);
+        container.parent = undefined;
+        return true;
     }
-    setAnimator(animator) {
-        this.animators[animator.name] = animator;
+    removeFromParent() {
+        if (!this.parent)
+            return;
+        this.parent.removeChild(this);
     }
-    advance(frameCount, object) {
-        const nextFrame = this.currentFrame + frameCount;
-        const animators = this.animators;
-        for (const animatorName in animators) {
-            if (animators.hasOwnProperty(animatorName)) {
-                animators[animatorName].apply(object, nextFrame);
+    render(renderer) {
+        for (let child of this.children) {
+            renderer.render(child);
+        }
+    }
+    beforeRender(renderer) { }
+    afterRender(renderer) { }
+    update(delta) {
+        if (this.currentAnimation) {
+            const goto = this.currentAnimation.advance(1, this);
+            if (goto) {
+                if (goto.animation)
+                    this.runAnimation(goto.animation, goto.frame);
+                else
+                    this.currentAnimation.run(goto.frame);
             }
         }
-        this.currentFrame = nextFrame;
-        if (this.frameCount === nextFrame)
-            return this.finalAction;
-        return undefined;
+        this.tasks.update(delta);
+        for (let child of this.children) {
+            child.update(delta);
+        }
     }
-    static loop(frame = 0) {
-        return new FinalAnimationAction(frame);
+    runAnimation(name, frame = 0) {
+        this.currentAnimation = this.animations.get(name);
+        this.currentAnimation.run(frame);
     }
-    static goto(frame = 0, animation) {
-        return new FinalAnimationAction(frame, animation);
+    tryRunAnimation(name, frame = 0) {
+        const animation = this.animations.tryGet(name);
+        if (animation) {
+            this.currentAnimation = animation;
+            this.currentAnimation.run(frame);
+        }
+    }
+    runChildAnimation(name) {
+        for (let child of this.children) {
+            child.tryRunAnimation(name);
+        }
     }
 }
-class AnimationCollection {
+class Widget extends RenderObject {
     constructor() {
-        this.animations = {};
+        super(...arguments);
+        this.children = [];
+        this.position = Vector2.zero;
+        this.scale = Vector2.one;
+        this.rotation = 0;
+        this.pivot = Vector2.zero;
+        this.size = new Vector2(100, 100);
+        this.opacity = 1;
     }
-    set(name, animation) {
-        if (this.animations.hasOwnProperty(name))
-            throw "Animation with this name has been added already";
-        this.animations[name] = animation;
+    beforeRender(renderer) {
+        renderer.save();
+        const offset = this.position.subtract(this.pivot.multiply(new Vector2(this.width, this.height)));
+        renderer.globalAlpha *= this.opacity;
+        renderer.translate(offset.x, offset.y);
+        renderer.rotate(this.rotation);
+        renderer.scale(this.scale.x, this.scale.y);
     }
-    get(name) {
-        if (!this.animations.hasOwnProperty(name))
-            throw "Animation with this name hasn't been added";
-        return this.animations[name];
+    afterRender(renderer) {
+        renderer.restore();
+    }
+    get x() {
+        return this.position.x;
+    }
+    set x(value) {
+        this.position.x = value;
+    }
+    get y() {
+        return this.position.y;
+    }
+    set y(value) {
+        this.position.y = value;
+    }
+    get width() {
+        return this.size.x;
+    }
+    set width(value) {
+        this.size.x = value;
+    }
+    get height() {
+        return this.size.y;
+    }
+    set height(value) {
+        this.size.y = value;
+    }
+    addChild(widget) {
+        super.addChild(widget);
     }
 }
-var Interpolation;
-(function (Interpolation) {
-    Interpolation[Interpolation["None"] = 0] = "None";
-    Interpolation[Interpolation["Linear"] = 1] = "Linear";
-})(Interpolation || (Interpolation = {}));
-class Animator {
-    constructor(name) {
-        this.frames = [];
-        this.name = name;
+Widget.positionAnimator = () => new Vector2Animator("position");
+Widget.scaleAnimator = () => new Vector2Animator("scale");
+Widget.pivotAnimator = () => new Vector2Animator("pivot");
+Widget.sizeAnimator = () => new Vector2Animator("size");
+Widget.rotationAnimator = () => new NumberAnimator("rotation");
+class Application {
+    constructor(width = 800, height = 600) {
+        this.fps = 0;
+        this.view = document.createElement("div");
+        this.renderer = new Renderer(width, height);
+        this.view.appendChild(this.renderer.view);
+        this.audio = new AudioPlayer();
+        this.view.appendChild(this.audio.view);
+        this.input = new Input();
     }
-    apply(object, frame) {
-        const lastFrame = this.frames.lastOrDefault((element, index) => index <= frame);
-        if (!lastFrame)
-            return;
-        if (lastFrame.interpolation === Interpolation.None) {
-            this.applyValue(object, lastFrame.value);
-            return;
+    run() {
+        window.requestAnimationFrame((time) => this.handleAnimationFrame(time));
+        window.onkeydown = event => this.onKeyDown(event);
+        window.onkeyup = event => this.onKeyUp(event);
+    }
+    onKeyDown(event) {
+        this.input.addKeyEvent(this.translateKey(event.code), true);
+    }
+    onKeyUp(event) {
+        this.input.addKeyEvent(this.translateKey(event.code), false);
+    }
+    handleAnimationFrame(time) {
+        if (!this.time)
+            this.time = time;
+        const delta = (time - this.time) / 1000;
+        this.fps = 1 / delta;
+        this.input.processPendingKeyEvents();
+        this.update(delta);
+        this.render();
+        this.time = time;
+        window.requestAnimationFrame((time) => this.handleAnimationFrame(time));
+    }
+    render() {
+        this.renderer.flush();
+        if (this.root)
+            this.renderer.render(this.root);
+    }
+    update(delta) {
+        if (this.root)
+            this.root.update(delta);
+    }
+    translateKey(code) {
+        switch (code) {
+            case "ArrowUp": return 45;
+            case "ArrowDown": return 46;
+            case "ArrowRight": return 48;
+            case "ArrowLeft": return 47;
+            case "Space": return 51;
+            default: return 0;
         }
-        const nextFrame = this.frames.firstOrDefault((element, index) => index > frame);
-        if (!nextFrame) {
-            this.applyValue(object, lastFrame.value);
-            return;
-        }
-        const lastIndex = this.frames.indexOf(lastFrame);
-        const nextIndex = this.frames.indexOf(nextFrame);
-        const amount = (frame - lastIndex) / (nextIndex - lastIndex);
-        const interpolatedValue = this.interpolate(amount, lastFrame.value, nextFrame.value, lastFrame.interpolation);
-        this.applyValue(object, interpolatedValue);
     }
 }
-class KeyFrame {
-    constructor(value, interpolation = Interpolation.None) {
-        this.value = value;
-        this.interpolation = interpolation;
+class AudioPlayer {
+    constructor() {
+        this.audioElements = [];
+        this.freeAudioElements = [];
+        this.view = document.createElement("div");
     }
-}
-class GenericAnimator extends Animator {
-    constructor(name) {
-        super(name);
-        this.frames = [];
-    }
-    setFrame(frame, value, interpolation = Interpolation.None) {
-        this.frames[frame] = new KeyFrame(value, interpolation);
-    }
-    applyValue(object, value) {
-        object[this.name] = value;
-    }
-    interpolate(amount, from, to, interpolation) {
-        return from;
-    }
-}
-class Vector2Mutator {
-    constructor(vector) {
-        this.origin = vector;
-    }
-    add(value) {
-        this.apply(value, (lhs, rhs) => lhs + rhs);
-        return this;
-    }
-    subtract(value) {
-        this.apply(value, (lhs, rhs) => lhs - rhs);
-        return this;
-    }
-    multiply(value) {
-        this.apply(value, (lhs, rhs) => lhs * rhs);
-        return this;
-    }
-    divide(value) {
-        this.apply(value, (lhs, rhs) => lhs / rhs);
-        return this;
-    }
-    apply(value, fn) {
-        if (value instanceof Vector2) {
-            this.origin.x = fn(this.origin.x, value.x);
-            this.origin.y = fn(this.origin.y, value.y);
+    play(source, loop = false) {
+        let audioElement;
+        if (!this.freeAudioElements.any())
+            this.freeAudioElements = this.getFreeAudioElements();
+        if (!this.freeAudioElements.any()) {
+            audioElement = document.createElement("audio");
+            this.view.appendChild(audioElement);
         }
         else {
-            this.origin.x = fn(this.origin.x, value);
-            this.origin.y = fn(this.origin.y, value);
+            audioElement = this.freeAudioElements.pop();
         }
+        audioElement.src = source;
+        audioElement.loop = loop;
+        audioElement.play();
+    }
+    getFreeAudioElements() {
+        return this.audioElements.filter((value) => value.paused);
     }
 }
-class Vector2 {
-    constructor(x = 0, y = 0) {
-        this.x = x;
-        this.y = y;
+class EventObserver {
+    constructor(fn, context, once) {
+        this.fn = fn;
+        this.context = context;
+        this.once = once;
     }
-    set(x, y) {
-        this.x = x;
-        this.y = y;
+    execute(dispatcher) {
+        const fn = this.fn.bind(this.context);
+        dispatcher(fn);
+        if (this.once)
+            this.needRemoval = true;
     }
-    add(value) {
-        return this.combine(value, (lhs, rhs) => lhs + rhs);
+}
+class ObservableEvent {
+    constructor() {
+        this.observers = [];
     }
-    subtract(value) {
-        return this.combine(value, (lhs, rhs) => lhs - rhs);
+    dispatch(dispatcher) {
+        for (let i = this.observers.length - 1; i >= 0; i--) {
+            this.observers[i].execute(dispatcher);
+        }
+        this.observers = this.observers.filter(value => !value.needRemoval);
     }
-    multiply(value) {
-        return this.combine(value, (lhs, rhs) => lhs * rhs);
+    subscribe(fn, context) {
+        this.addObserver(fn, context, false);
     }
-    divide(value) {
-        return this.combine(value, (lhs, rhs) => lhs / rhs);
+    subscribeOnce(fn, context) {
+        this.addObserver(fn, context, true);
     }
-    combine(value, fn) {
-        if (value instanceof Vector2)
-            return new Vector2(fn(this.x, value.x), fn(this.y, value.y));
+    addObserver(fn, context, once) {
+        if (!this.observers)
+            this.observers = [];
+        const observer = new EventObserver(fn, context, once);
+        this.observers.push(observer);
+    }
+    remove(fn) {
+        if (!this.observers)
+            return;
+        this.observers = this.observers.filter(value => value.fn !== fn);
+    }
+    removeAll() {
+        this.observers = [];
+    }
+}
+if (!Array.prototype.last) {
+    Array.prototype.last = function (filter) {
+        if (this.length === 0)
+            throw "Array contains no elements";
+        let last;
+        if (filter) {
+            const filtered = this.filter(filter);
+            if (filtered.length === 0)
+                throw "Array contains no matching element";
+            last = filtered[filtered.length - 1];
+        }
         else
-            return new Vector2(fn(this.x, value), fn(this.y, value));
-    }
-    clone() {
-        return new Vector2(this.x, this.y);
-    }
-    mutate() {
-        return new Vector2Mutator(this);
-    }
-    static get zero() {
-        return new Vector2(0, 0);
-    }
-    static get half() {
-        return new Vector2(0.5, 0.5);
-    }
-    static get one() {
-        return new Vector2(1, 1);
-    }
+            last = this[this.length - 1];
+        return last;
+    };
 }
-class Vector2Animator extends GenericAnimator {
-    interpolate(amount, from, to, interpolation) {
-        switch (interpolation) {
-            case Interpolation.Linear:
-                return new Vector2(Math.lerp(amount, from.x, to.x), Math.lerp(amount, from.y, to.y));
-            default:
-                throw "Not supported";
+;
+if (!Array.prototype.lastOrDefault) {
+    Array.prototype.lastOrDefault = function (filter) {
+        try {
+            return this.last(filter);
+        }
+        catch (e) {
+            return undefined;
+        }
+    };
+}
+;
+if (!Array.prototype.first) {
+    Array.prototype.first = function (filter) {
+        if (this.length === 0)
+            throw "Array contains no elements";
+        if (filter) {
+            const filtered = this.filter(filter);
+            if (filtered.length === 0)
+                throw "Array contains no matching element";
+            return filtered[0];
+        }
+        return this[0];
+    };
+}
+;
+if (!Array.prototype.firstOrDefault) {
+    Array.prototype.firstOrDefault = function (filter) {
+        try {
+            return this.first(filter);
+        }
+        catch (e) {
+            return undefined;
+        }
+    };
+}
+;
+if (!Array.prototype.any) {
+    Array.prototype.any = function () {
+        return this.length > 0;
+    };
+}
+;
+Math.lerp = (amount, from, to) => from + (to - from) * amount;
+Math.clamp = (value, min, max) => (value < min) ? min : (value > max ? max : value);
+Math.HALFPI = Math.PI / 2;
+class Input {
+    constructor() {
+        this.previousKeyState = [];
+        this.currentKeyState = [];
+        this.keyEventQueue = [];
+    }
+    isKeyPressed(key) {
+        return this.currentKeyState[key];
+    }
+    wasKeyPressed(key) {
+        return this.currentKeyState[key] && !this.previousKeyState[key];
+    }
+    wasKeyReleased(key) {
+        return !this.currentKeyState[key] && this.previousKeyState[key];
+    }
+    addKeyEvent(key, down) {
+        this.keyEventQueue.push({ key: key, down: down });
+    }
+    processPendingKeyEvents() {
+        this.previousKeyState = this.currentKeyState.slice();
+        while (this.keyEventQueue.length > 0) {
+            const event = this.keyEventQueue.pop();
+            this.currentKeyState[event.key] = event.down;
         }
     }
 }
-class NumberAnimator extends GenericAnimator {
-    interpolate(amount, from, to, interpolation) {
-        switch (interpolation) {
-            case Interpolation.Linear:
-                return Math.lerp(amount, from, to);
-            default:
-                throw "Not supported";
-        }
+class Mechanism {
+    static helloWorld() {
+        console.debug(`Mechanism ${this.version}`);
     }
 }
-class VectorGraphics {
-    constructor(canvas) {
-        this.canvas = canvas;
-    }
-    fillStyle(color) {
-        this.canvas.fillStyle = color.toCssHex();
-        return this;
-    }
-    strokeStyle(lineWidth, color) {
-        this.canvas.lineWidth = lineWidth;
-        if (color)
-            this.canvas.strokeStyle = color.toCssHex();
-        return this;
-    }
-    drawRect(x, y, width, height) {
-        this.canvas.fillRect(x, y, width, height);
-        this.canvas.strokeRect(x, y, width, height);
-        return this;
-    }
-    drawRoundedRect(x, y, width, height, radius) {
-        const canvas = this.canvas;
-        canvas.save();
-        canvas.beginPath();
-        canvas.moveTo(x, y + radius);
-        canvas.lineTo(x, y + height - radius);
-        canvas.quadraticCurveTo(x, y + height, x + radius, y + height);
-        canvas.lineTo(x + width - radius, y + height);
-        canvas.quadraticCurveTo(x + width, y + height, x + width, y + height - radius);
-        canvas.lineTo(x + width, y + radius);
-        canvas.quadraticCurveTo(x + width, y, x + width - radius, y);
-        canvas.lineTo(x + radius, y);
-        canvas.quadraticCurveTo(x, y, x, y + radius);
-        canvas.closePath();
-        canvas.fill();
-        canvas.stroke();
-        canvas.restore();
-        return this;
-    }
-}
+Mechanism.version = "1.0.0";
 class Renderer {
     constructor(width, height) {
         const canvas = document.createElement("canvas");
@@ -271,6 +366,12 @@ class Renderer {
         const ctx = this.context;
         ctx.mozImageSmoothingEnabled = ctx.webkitImageSmoothingEnabled =
             ctx.msImageSmoothingEnabled = ctx.imageSmoothingEnabled = false;
+    }
+    get globalAlpha() {
+        return this.context.globalAlpha;
+    }
+    set globalAlpha(value) {
+        this.context.globalAlpha = value;
     }
     render(renderObject) {
         renderObject.beforeRender(this);
@@ -336,61 +437,398 @@ class Renderer {
         this.context.restore();
     }
 }
-class AudioPlayer {
-    constructor() {
-        this.audioElements = [];
-        this.freeAudioElements = [];
-        this.view = document.createElement("div");
+class Animation {
+    constructor(frameCount) {
+        this.animators = {};
+        this.currentFrame = 0;
+        this.frameCount = frameCount;
     }
-    play(source, loop = false) {
-        let audioElement;
-        if (!this.freeAudioElements.any())
-            this.freeAudioElements = this.getFreeAudioElements();
-        if (!this.freeAudioElements.any()) {
-            audioElement = document.createElement("audio");
-            this.view.appendChild(audioElement);
-        }
-        else {
-            audioElement = this.freeAudioElements.pop();
-        }
-        audioElement.src = source;
-        audioElement.loop = loop;
-        audioElement.play();
+    run(frame = 0) {
+        this.currentFrame = frame;
     }
-    getFreeAudioElements() {
-        return this.audioElements.filter((value) => value.paused);
+    setAnimator(animator) {
+        this.animators[animator.name] = animator;
+    }
+    advance(frameCount, object) {
+        const nextFrame = this.currentFrame + frameCount;
+        const animators = this.animators;
+        for (const animatorName in animators) {
+            if (animators.hasOwnProperty(animatorName)) {
+                animators[animatorName].apply(object, nextFrame);
+            }
+        }
+        this.currentFrame = nextFrame;
+        if (this.frameCount === nextFrame)
+            return this.finalAction;
+        return undefined;
+    }
+    static loop(frame = 0) {
+        return new FinalAnimationAction(frame);
+    }
+    static goto(frame = 0, animation) {
+        return new FinalAnimationAction(frame, animation);
     }
 }
-class Application {
-    constructor(width = 800, height = 600) {
-        this.fps = 0;
-        this.view = document.createElement("div");
-        this.renderer = new Renderer(width, height);
-        this.view.appendChild(this.renderer.view);
-        this.audio = new AudioPlayer();
-        this.view.appendChild(this.audio.view);
+class AnimationCollection {
+    constructor() {
+        this.animations = {};
     }
-    run() {
-        window.requestAnimationFrame((time) => this.handleAnimationFrame(time));
+    set(name, animation) {
+        if (this.animations.hasOwnProperty(name))
+            throw "Animation with this name has been added already";
+        this.animations[name] = animation;
     }
-    handleAnimationFrame(time) {
-        if (!this.time)
-            this.time = time;
-        const delta = (time - this.time) / 1000;
-        this.fps = 1 / delta;
-        this.update(delta);
-        this.render();
-        this.time = time;
-        window.requestAnimationFrame((time) => this.handleAnimationFrame(time));
+    get(name) {
+        if (!this.animations.hasOwnProperty(name))
+            throw "Animation with this name hasn't been added";
+        return this.animations[name];
     }
-    render() {
-        this.renderer.flush();
-        if (this.root)
-            this.renderer.render(this.root);
+    tryGet(name) {
+        return this.animations[name];
+    }
+}
+class Animator {
+    constructor(name) {
+        this.frames = [];
+        this.name = name;
+    }
+    apply(object, frame) {
+        const lastFrame = this.frames.lastOrDefault((element, index) => index <= frame);
+        if (!lastFrame)
+            return;
+        if (lastFrame.interpolation === Interpolation.None) {
+            this.applyValue(object, lastFrame.value);
+            return;
+        }
+        const nextFrame = this.frames.firstOrDefault((element, index) => index > frame);
+        if (!nextFrame) {
+            this.applyValue(object, lastFrame.value);
+            return;
+        }
+        const lastIndex = this.frames.indexOf(lastFrame);
+        const nextIndex = this.frames.indexOf(nextFrame);
+        const amount = (frame - lastIndex) / (nextIndex - lastIndex);
+        const interpolatedValue = this.interpolate(amount, lastFrame.value, nextFrame.value, lastFrame.interpolation);
+        this.applyValue(object, interpolatedValue);
+    }
+}
+class GenericAnimator extends Animator {
+    constructor(name) {
+        super(name);
+        this.frames = [];
+    }
+    setFrame(frame, value, interpolation = Interpolation.None) {
+        this.frames[frame] = new KeyFrame(value, interpolation);
+    }
+    applyValue(object, value) {
+        object[this.name] = value;
+    }
+    interpolate(amount, from, to, interpolation) {
+        return from;
+    }
+}
+class Vector2Animator extends GenericAnimator {
+    interpolate(amount, from, to, interpolation) {
+        switch (interpolation) {
+            case Interpolation.Linear:
+                return new Vector2(Math.lerp(amount, from.x, to.x), Math.lerp(amount, from.y, to.y));
+            default:
+                throw "Not supported";
+        }
+    }
+}
+class NumberAnimator extends GenericAnimator {
+    interpolate(amount, from, to, interpolation) {
+        switch (interpolation) {
+            case Interpolation.Linear:
+                return Math.lerp(amount, from, to);
+            default:
+                throw "Not supported";
+        }
+    }
+}
+class FinalAnimationAction {
+    constructor(frame, animation) {
+        this.animation = animation;
+        this.frame = frame;
+    }
+}
+var Interpolation;
+(function (Interpolation) {
+    Interpolation[Interpolation["None"] = 0] = "None";
+    Interpolation[Interpolation["Linear"] = 1] = "Linear";
+})(Interpolation || (Interpolation = {}));
+class KeyFrame {
+    constructor(value, interpolation = Interpolation.None) {
+        this.value = value;
+        this.interpolation = interpolation;
+    }
+}
+class Label extends Widget {
+    constructor(text) {
+        super();
+        this.verticalTextAlignment = TextAlignment.Start;
+        this.horizontalTextAlignment = TextAlignment.Start;
+        this.text = text;
+    }
+    render(renderer) {
+        if (!this.text) {
+            super.render(renderer);
+            return;
+        }
+        const measure = new Vector2(renderer.measureText(this.text), 30);
+        const position = Vector2.zero;
+        switch (this.horizontalTextAlignment) {
+            case TextAlignment.Center:
+                position.x = this.size.x / 2 - measure.x / 2;
+                break;
+            case TextAlignment.End:
+                position.x = this.size.x - measure.x;
+                break;
+        }
+        switch (this.verticalTextAlignment) {
+            case TextAlignment.Start:
+                position.y = measure.y;
+                break;
+            case TextAlignment.Center:
+                position.y = this.size.y / 2 + measure.y / 2;
+                break;
+            case TextAlignment.End:
+                position.y = this.size.y;
+                break;
+        }
+        renderer.renderText(this.text, position.x, position.y);
+        super.render(renderer);
+    }
+}
+class NineGrid extends Widget {
+    constructor(texture) {
+        super();
+        this.left = 0;
+        this.right = 0;
+        this.top = 0;
+        this.bottom = 0;
+        this.texture = texture;
+    }
+    render(renderer) {
+        renderer.save();
+        for (const part of this.getParts()) {
+            renderer.renderTexture(this.texture, part.target.left, part.target.top, part.target.width, part.target.height, part.crop.left, part.crop.top, part.crop.width, part.crop.height);
+        }
+        renderer.restore();
+        super.render(renderer);
+    }
+    getParts() {
+        let parts = [];
+        let textureSize;
+        if (this.texture)
+            textureSize = this.texture.size;
+        else
+            textureSize = this.size;
+        const innerCrop = new Rectangle(this.left, this.top, textureSize.x - this.right, textureSize.y - this.bottom);
+        const cropMax = new Vector2(textureSize.x, textureSize.y);
+        const innerTarget = new Rectangle(this.left, this.top, this.width - this.right, this.height - this.bottom);
+        const targetMax = new Vector2(this.width, this.height);
+        const getPart = (getCoordinates) => {
+            return {
+                target: getCoordinates(innerTarget, targetMax),
+                crop: getCoordinates(innerCrop, cropMax)
+            };
+        };
+        parts[0] = getPart((source, max) => new Rectangle(0, 0, source.left, source.top));
+        parts[1] = getPart((source, max) => new Rectangle(source.left, 0, source.right, source.top));
+        parts[2] = getPart((source, max) => new Rectangle(source.right, 0, max.x, source.left));
+        parts[3] = getPart((source, max) => new Rectangle(0, source.top, source.left, source.bottom));
+        parts[4] = getPart((source, max) => new Rectangle(source.left, source.top, source.right, source.bottom));
+        parts[5] = getPart((source, max) => new Rectangle(source.right, source.top, max.x, source.bottom));
+        parts[6] = getPart((source, max) => new Rectangle(0, source.bottom, source.left, max.y));
+        parts[7] = getPart((source, max) => new Rectangle(source.left, source.bottom, source.right, max.y));
+        parts[8] = getPart((source, max) => new Rectangle(source.right, source.bottom, max.x, max.y));
+        parts = parts.filter(value => value.target.width > 0 && value.target.height > 0);
+        return parts;
+    }
+}
+class Sprite extends Widget {
+    constructor(texture) {
+        super();
+        this.texture = texture;
+    }
+    static fromImage(url) {
+        return new Sprite(Texture.fromImage(url));
+    }
+    render(renderer) {
+        renderer.renderTexture(this.texture, 0, 0, this.size.x, this.size.y);
+        super.render(renderer);
+    }
+}
+Sprite.textureAnimator = () => new GenericAnimator("texture");
+class Task {
+    constructor(iterator) {
+        this.totalTime = 0;
+        this.delta = 0;
+        this.iterator = iterator;
+    }
+    get completed() {
+        return this.iterator === undefined;
     }
     update(delta) {
-        if (this.root)
-            this.root.update(delta);
+        if (!this.iterator)
+            return;
+        this.delta = delta;
+        this.totalTime += delta;
+        const savedCurrent = Task.current;
+        Task.current = this;
+        const predicate = this.waitPredicate;
+        if (predicate) {
+            predicate.totalTime += delta;
+            if (predicate instanceof TaskWaitPredicate) {
+                predicate.task.update(delta);
+            }
+            if (predicate.evaluate()) {
+                this.waitPredicate = undefined;
+            }
+            else {
+                Task.current = savedCurrent;
+                return;
+            }
+        }
+        const next = this.iterator.next();
+        if (next.done)
+            this.iterator = undefined;
+        else
+            this.waitPredicate = next.value;
+        Task.current = savedCurrent;
+    }
+    processWaitPredicate(delta) {
+        const predicate = this.waitPredicate;
+        if (!predicate)
+            return false;
+        predicate.totalTime += delta;
+        if (predicate instanceof TaskWaitPredicate) {
+            predicate.task.update(delta);
+        }
+        const predicateCompleted = predicate.evaluate();
+        if (predicateCompleted)
+            this.waitPredicate = undefined;
+        return !predicateCompleted;
+    }
+    stop() {
+        this.iterator = undefined;
+    }
+    static *sinMotion(timePeriod, from, to) {
+        for (let t of this.motion(timePeriod, from, to, fraction => Math.sin(fraction * Math.HALFPI))) {
+            yield t;
+        }
+    }
+    static *sqrtMotion(timePeriod, from, to) {
+        for (let t of this.motion(timePeriod, from, to, fraction => Math.sqrt(fraction))) {
+            yield t;
+        }
+    }
+    static *linearMotion(timePeriod, from, to) {
+        for (let t of this.motion(timePeriod, from, to, fraction => fraction)) {
+            yield t;
+        }
+    }
+    static *motion(timePeriod, from, to, fn) {
+        for (let t = 0; t < timePeriod; t += Task.current.delta)
+            yield Math.lerp(fn(t / timePeriod), from, to);
+        yield to;
+    }
+}
+class TaskList {
+    add(task) {
+        if (!this.tasks)
+            this.tasks = [];
+        if (task instanceof Task) {
+            this.tasks.push(task);
+            return;
+        }
+        this.tasks.push(new Task(task));
+    }
+    update(delta) {
+        if (!this.tasks || this.tasks.length === 0)
+            return;
+        const savedCurrent = TaskList.current;
+        TaskList.current = this;
+        for (const task of this.tasks) {
+            task.update(delta);
+        }
+        this.tasks = this.tasks.filter(task => !task.completed);
+        TaskList.current = savedCurrent;
+    }
+}
+class Wait {
+    static seconds(seconds) {
+        const waitPredicate = new TimeWaitPredicate();
+        waitPredicate.waitTime = seconds;
+        return waitPredicate;
+    }
+    static frame() {
+        return Wait.seconds(0);
+    }
+    static task(task) {
+        const waitPredicate = new TaskWaitPredicate();
+        waitPredicate.task = new Task(task);
+        return waitPredicate;
+    }
+    static while(predicate) {
+        const waitPredicate = new BooleanWaitPredicate();
+        waitPredicate.predicate = predicate;
+        return waitPredicate;
+    }
+    static animation(renderObject) {
+        const waitPredicate = new AnimationWaitPredicate();
+        waitPredicate.renderObject = renderObject;
+        return waitPredicate;
+    }
+}
+class WaitPredicate {
+    constructor() {
+        this.totalTime = 0;
+    }
+}
+class AnimationWaitPredicate extends WaitPredicate {
+    evaluate() { throw new Error("Not implemented"); }
+}
+class BooleanWaitPredicate extends WaitPredicate {
+    evaluate() { return this.predicate(this.totalTime); }
+}
+class TimeWaitPredicate extends WaitPredicate {
+    constructor() {
+        super(...arguments);
+        this.waitTime = 0;
+    }
+    evaluate() { return this.totalTime >= this.waitTime; }
+}
+class TaskWaitPredicate extends WaitPredicate {
+    evaluate() { return this.task.completed; }
+}
+var TextAlignment;
+(function (TextAlignment) {
+    TextAlignment[TextAlignment["Start"] = 0] = "Start";
+    TextAlignment[TextAlignment["Center"] = 1] = "Center";
+    TextAlignment[TextAlignment["End"] = 2] = "End";
+})(TextAlignment || (TextAlignment = {}));
+class Texture {
+    constructor(source) {
+        this.source = source;
+    }
+    static fromImage(url) {
+        const image = new Image();
+        const texture = new Texture(image);
+        image.src = url;
+        image.onerror = () => { texture.source = undefined; };
+        return texture;
+    }
+    get size() {
+        return new Vector2(this.width, this.height);
+    }
+    get width() {
+        return this.source ? this.source.naturalWidth : 0;
+    }
+    get height() {
+        return this.source ? this.source.naturalHeight : 0;
     }
 }
 class Color {
@@ -571,303 +1009,6 @@ Color.wheat = new Color(0xf5deb3);
 Color.whitesmoke = new Color(0xf5f5f5);
 Color.yellowgreen = new Color(0x9acd32);
 Color.rebeccapurple = new Color(0xffa500);
-class EventObserver {
-    constructor(fn, context, once) {
-        this.fn = fn;
-        this.context = context;
-        this.once = once;
-    }
-    execute(dispatcher) {
-        const fn = this.fn.bind(this.context);
-        dispatcher(fn);
-        if (this.once)
-            this.needRemoval = true;
-    }
-}
-class ObservableEvent {
-    constructor() {
-        this.observers = [];
-    }
-    dispatch(dispatcher) {
-        for (let i = this.observers.length - 1; i >= 0; i--) {
-            this.observers[i].execute(dispatcher);
-        }
-        this.observers = this.observers.filter(value => !value.needRemoval);
-    }
-    subscribe(fn, context) {
-        this.addObserver(fn, context, false);
-    }
-    subscribeOnce(fn, context) {
-        this.addObserver(fn, context, true);
-    }
-    addObserver(fn, context, once) {
-        if (!this.observers)
-            this.observers = [];
-        const observer = new EventObserver(fn, context, once);
-        this.observers.push(observer);
-    }
-    remove(fn) {
-        if (!this.observers)
-            return;
-        this.observers = this.observers.filter(value => value.fn !== fn);
-    }
-    removeAll() {
-        this.observers = [];
-    }
-}
-class NotImplementedError {
-    constructor(message = "Not implemented") {
-        this.name = "NotImplementedError";
-        this.message = message;
-    }
-}
-class RenderObject {
-    constructor() {
-        this.children = [];
-        this.animations = new AnimationCollection();
-        this.tasks = new TaskList();
-    }
-    addChild(container) {
-        this.children.push(container);
-        container.parent = this;
-    }
-    removeChild(container) {
-        const index = this.children.indexOf(container);
-        if (index === -1)
-            return false;
-        this.children.splice(index, 1);
-        container.parent = undefined;
-        return true;
-    }
-    render(renderer) {
-        for (let child of this.children) {
-            renderer.render(child);
-        }
-    }
-    beforeRender(renderer) { }
-    afterRender(renderer) { }
-    update(delta) {
-        if (this.currentAnimation) {
-            const goto = this.currentAnimation.advance(1, this);
-            if (goto) {
-                if (goto.animation)
-                    this.runAnimation(goto.animation, goto.frame);
-                else
-                    this.currentAnimation.run(goto.frame);
-            }
-        }
-        this.tasks.update(delta);
-        for (let child of this.children) {
-            child.update(delta);
-        }
-    }
-    runAnimation(name, frame = 0) {
-        this.currentAnimation = this.animations.get(name);
-        this.currentAnimation.run(frame);
-    }
-    runChildAnimation(name) {
-        throw new NotImplementedError();
-    }
-}
-class Widget extends RenderObject {
-    constructor() {
-        super(...arguments);
-        this.children = [];
-        this.position = Vector2.zero;
-        this.scale = Vector2.one;
-        this.rotation = 0;
-        this.pivot = Vector2.zero;
-        this.size = new Vector2(100, 100);
-    }
-    beforeRender(renderer) {
-        renderer.save();
-        const offset = this.position.subtract(this.pivot.multiply(new Vector2(this.width, this.height)));
-        renderer.translate(offset.x, offset.y);
-        renderer.rotate(this.rotation);
-        renderer.scale(this.scale.x, this.scale.y);
-    }
-    afterRender(renderer) {
-        renderer.restore();
-    }
-    get x() {
-        return this.position.x;
-    }
-    set x(value) {
-        this.position.x = value;
-    }
-    get y() {
-        return this.position.y;
-    }
-    set y(value) {
-        this.position.y = value;
-    }
-    get width() {
-        return this.size.x;
-    }
-    set width(value) {
-        this.size.x = value;
-    }
-    get height() {
-        return this.size.y;
-    }
-    set height(value) {
-        this.size.y = value;
-    }
-    addChild(widget) {
-        super.addChild(widget);
-    }
-}
-Widget.positionAnimator = () => new Vector2Animator("position");
-Widget.scaleAnimator = () => new Vector2Animator("scale");
-Widget.pivotAnimator = () => new Vector2Animator("pivot");
-Widget.sizeAnimator = () => new Vector2Animator("size");
-Widget.rotationAnimator = () => new NumberAnimator("rotation");
-var TextAlignment;
-(function (TextAlignment) {
-    TextAlignment[TextAlignment["Start"] = 0] = "Start";
-    TextAlignment[TextAlignment["Center"] = 1] = "Center";
-    TextAlignment[TextAlignment["End"] = 2] = "End";
-})(TextAlignment || (TextAlignment = {}));
-class Label extends Widget {
-    constructor(text) {
-        super();
-        this.verticalTextAlignment = TextAlignment.Start;
-        this.horizontalTextAlignment = TextAlignment.Start;
-        this.text = text;
-    }
-    render(renderer) {
-        if (!this.text) {
-            super.render(renderer);
-            return;
-        }
-        const measure = new Vector2(renderer.measureText(this.text), 30);
-        const position = Vector2.zero;
-        switch (this.horizontalTextAlignment) {
-            case TextAlignment.Center:
-                position.x = this.size.x / 2 - measure.x / 2;
-                break;
-            case TextAlignment.End:
-                position.x = this.size.x - measure.x;
-                break;
-        }
-        switch (this.verticalTextAlignment) {
-            case TextAlignment.Start:
-                position.y = measure.y;
-                break;
-            case TextAlignment.Center:
-                position.y = this.size.y / 2 + measure.y / 2;
-                break;
-            case TextAlignment.End:
-                position.y = this.size.y;
-                break;
-        }
-        renderer.renderText(this.text, position.x, position.y);
-        super.render(renderer);
-    }
-}
-if (!Array.prototype.last) {
-    Array.prototype.last = function (filter) {
-        if (this.length === 0)
-            throw "Array contains no elements";
-        let last;
-        if (filter) {
-            const filtered = this.filter(filter);
-            if (filtered.length === 0)
-                throw "Array contains no matching element";
-            last = filtered[filtered.length - 1];
-        }
-        else
-            last = this[this.length - 1];
-        return last;
-    };
-}
-;
-if (!Array.prototype.lastOrDefault) {
-    Array.prototype.lastOrDefault = function (filter) {
-        try {
-            return this.last(filter);
-        }
-        catch (e) {
-            return undefined;
-        }
-    };
-}
-;
-if (!Array.prototype.first) {
-    Array.prototype.first = function (filter) {
-        if (this.length === 0)
-            throw "Array contains no elements";
-        if (filter) {
-            const filtered = this.filter(filter);
-            if (filtered.length === 0)
-                throw "Array contains no matching element";
-            return filtered[0];
-        }
-        return this[0];
-    };
-}
-;
-if (!Array.prototype.firstOrDefault) {
-    Array.prototype.firstOrDefault = function (filter) {
-        try {
-            return this.first(filter);
-        }
-        catch (e) {
-            return undefined;
-        }
-    };
-}
-;
-if (!Array.prototype.any) {
-    Array.prototype.any = function () {
-        return this.length > 0;
-    };
-}
-;
-Math.lerp = (amount, from, to) => from + (to - from) * amount;
-Math.clamp = (value, min, max) => (value < min) ? min : (value > max ? max : value);
-Math.HALFPI = Math.PI / 2;
-class Mechanism {
-    static helloWorld() {
-        console.debug(`Mechanism ${this.version}`);
-    }
-}
-Mechanism.version = "1.0.0";
-class Texture {
-    constructor(source) {
-        this.source = source;
-    }
-    static fromImage(url) {
-        const image = new Image();
-        const texture = new Texture(image);
-        image.src = url;
-        image.onerror = () => { texture.source = undefined; };
-        return texture;
-    }
-    get size() {
-        return new Vector2(this.width, this.height);
-    }
-    get width() {
-        return this.source ? this.source.naturalWidth : 0;
-    }
-    get height() {
-        return this.source ? this.source.naturalHeight : 0;
-    }
-}
-class Sprite extends Widget {
-    constructor(texture) {
-        super();
-        this.texture = texture;
-    }
-    static fromImage(url) {
-        return new Sprite(Texture.fromImage(url));
-    }
-    render(renderer) {
-        renderer.renderTexture(this.texture, 0, 0, this.size.x, this.size.y);
-        super.render(renderer);
-    }
-}
-Sprite.textureAnimator = () => new GenericAnimator("texture");
 class Rectangle {
     constructor(minOrLeft, maxOrTop, right, bottom) {
         if (typeof minOrLeft === "number" && typeof maxOrTop === "number") {
@@ -898,193 +1039,117 @@ class Rectangle {
         return this.max.y - this.min.y;
     }
 }
-class NineGrid extends Widget {
-    constructor(texture) {
-        super();
-        this.left = 0;
-        this.right = 0;
-        this.top = 0;
-        this.bottom = 0;
-        this.texture = texture;
+class Vector2 {
+    constructor(x = 0, y = 0) {
+        this.x = x;
+        this.y = y;
     }
-    render(renderer) {
-        renderer.save();
-        for (const part of this.getParts()) {
-            renderer.renderTexture(this.texture, part.target.left, part.target.top, part.target.width, part.target.height, part.crop.left, part.crop.top, part.crop.width, part.crop.height);
-        }
-        renderer.restore();
-        super.render(renderer);
+    set(x, y) {
+        this.x = x;
+        this.y = y;
     }
-    getParts() {
-        let parts = [];
-        let textureSize;
-        if (this.texture)
-            textureSize = this.texture.size;
+    add(value) {
+        return this.combine(value, (lhs, rhs) => lhs + rhs);
+    }
+    subtract(value) {
+        return this.combine(value, (lhs, rhs) => lhs - rhs);
+    }
+    multiply(value) {
+        return this.combine(value, (lhs, rhs) => lhs * rhs);
+    }
+    divide(value) {
+        return this.combine(value, (lhs, rhs) => lhs / rhs);
+    }
+    combine(value, fn) {
+        if (value instanceof Vector2)
+            return new Vector2(fn(this.x, value.x), fn(this.y, value.y));
         else
-            textureSize = this.size;
-        const innerCrop = new Rectangle(this.left, this.top, textureSize.x - this.right, textureSize.y - this.bottom);
-        const cropMax = new Vector2(textureSize.x, textureSize.y);
-        const innerTarget = new Rectangle(this.left, this.top, this.width - this.right, this.height - this.bottom);
-        const targetMax = new Vector2(this.width, this.height);
-        const getPart = (getCoordinates) => {
-            return {
-                target: getCoordinates(innerTarget, targetMax),
-                crop: getCoordinates(innerCrop, cropMax)
-            };
-        };
-        parts[0] = getPart((source, max) => new Rectangle(0, 0, source.left, source.top));
-        parts[1] = getPart((source, max) => new Rectangle(source.left, 0, source.right, source.top));
-        parts[2] = getPart((source, max) => new Rectangle(source.right, 0, max.x, source.left));
-        parts[3] = getPart((source, max) => new Rectangle(0, source.top, source.left, source.bottom));
-        parts[4] = getPart((source, max) => new Rectangle(source.left, source.top, source.right, source.bottom));
-        parts[5] = getPart((source, max) => new Rectangle(source.right, source.top, max.x, source.bottom));
-        parts[6] = getPart((source, max) => new Rectangle(0, source.bottom, source.left, max.y));
-        parts[7] = getPart((source, max) => new Rectangle(source.left, source.bottom, source.right, max.y));
-        parts[8] = getPart((source, max) => new Rectangle(source.right, source.bottom, max.x, max.y));
-        parts = parts.filter(value => value.target.width > 0 && value.target.height > 0);
-        return parts;
+            return new Vector2(fn(this.x, value), fn(this.y, value));
+    }
+    clone() {
+        return new Vector2(this.x, this.y);
+    }
+    mutate() {
+        return new Vector2Mutator(this);
+    }
+    static get zero() {
+        return new Vector2(0, 0);
+    }
+    static get half() {
+        return new Vector2(0.5, 0.5);
+    }
+    static get one() {
+        return new Vector2(1, 1);
     }
 }
-class WaitPredicate {
-    constructor() {
-        this.totalTime = 0;
+class Vector2Mutator {
+    constructor(vector) {
+        this.origin = vector;
     }
-}
-class AnimationWaitPredicate extends WaitPredicate {
-    evaluate() { throw new Error("Not implemented"); }
-}
-class BooleanWaitPredicate extends WaitPredicate {
-    evaluate() { return this.predicate(this.totalTime); }
-}
-class TimeWaitPredicate extends WaitPredicate {
-    constructor() {
-        super(...arguments);
-        this.waitTime = 0;
+    add(value) {
+        this.apply(value, (lhs, rhs) => lhs + rhs);
+        return this;
     }
-    evaluate() { return this.totalTime >= this.waitTime; }
-}
-class TaskWaitPredicate extends WaitPredicate {
-    evaluate() { return this.task.completed; }
-}
-class Task {
-    constructor(iterator) {
-        this.totalTime = 0;
-        this.delta = 0;
-        this.iterator = iterator;
+    subtract(value) {
+        this.apply(value, (lhs, rhs) => lhs - rhs);
+        return this;
     }
-    get completed() {
-        return this.iterator === undefined;
+    multiply(value) {
+        this.apply(value, (lhs, rhs) => lhs * rhs);
+        return this;
     }
-    update(delta) {
-        if (!this.iterator)
-            return;
-        this.delta = delta;
-        this.totalTime += delta;
-        const savedCurrent = Task.current;
-        Task.current = this;
-        const predicate = this.waitPredicate;
-        if (predicate) {
-            predicate.totalTime += delta;
-            if (predicate instanceof TaskWaitPredicate) {
-                predicate.task.update(delta);
-            }
-            if (predicate.evaluate()) {
-                this.waitPredicate = undefined;
-            }
-            else {
-                Task.current = savedCurrent;
-                return;
-            }
+    divide(value) {
+        this.apply(value, (lhs, rhs) => lhs / rhs);
+        return this;
+    }
+    apply(value, fn) {
+        if (value instanceof Vector2) {
+            this.origin.x = fn(this.origin.x, value.x);
+            this.origin.y = fn(this.origin.y, value.y);
         }
-        const next = this.iterator.next();
-        if (next.done)
-            this.iterator = undefined;
-        else
-            this.waitPredicate = next.value;
-        Task.current = savedCurrent;
-    }
-    processWaitPredicate(delta) {
-        const predicate = this.waitPredicate;
-        if (!predicate)
-            return false;
-        predicate.totalTime += delta;
-        if (predicate instanceof TaskWaitPredicate) {
-            predicate.task.update(delta);
-        }
-        const predicateCompleted = predicate.evaluate();
-        if (predicateCompleted)
-            this.waitPredicate = undefined;
-        return !predicateCompleted;
-    }
-    stop() {
-        this.iterator = undefined;
-    }
-    static *sinMotion(timePeriod, from, to) {
-        for (let t of this.motion(timePeriod, from, to, fraction => Math.sin(fraction * Math.HALFPI))) {
-            yield t;
+        else {
+            this.origin.x = fn(this.origin.x, value);
+            this.origin.y = fn(this.origin.y, value);
         }
     }
-    static *sqrtMotion(timePeriod, from, to) {
-        for (let t of this.motion(timePeriod, from, to, fraction => Math.sqrt(fraction))) {
-            yield t;
-        }
-    }
-    static *linearMotion(timePeriod, from, to) {
-        for (let t of this.motion(timePeriod, from, to, fraction => fraction)) {
-            yield t;
-        }
-    }
-    static *motion(timePeriod, from, to, fn) {
-        for (let t = 0; t < timePeriod; t += Task.current.delta)
-            yield Math.lerp(fn(t / timePeriod), from, to);
-        yield to;
-    }
 }
-class TaskList {
-    add(task) {
-        if (!this.tasks)
-            this.tasks = [];
-        if (task instanceof Task) {
-            this.tasks.push(task);
-            return;
-        }
-        this.tasks.push(new Task(task));
+class VectorGraphics {
+    constructor(canvas) {
+        this.canvas = canvas;
     }
-    update(delta) {
-        if (!this.tasks || this.tasks.length === 0)
-            return;
-        const savedCurrent = TaskList.current;
-        TaskList.current = this;
-        for (const task of this.tasks) {
-            task.update(delta);
-        }
-        this.tasks = this.tasks.filter(task => !task.completed);
-        TaskList.current = savedCurrent;
+    fillStyle(color) {
+        this.canvas.fillStyle = color.toCssHex();
+        return this;
     }
-}
-class Wait {
-    static seconds(seconds) {
-        const waitPredicate = new TimeWaitPredicate();
-        waitPredicate.waitTime = seconds;
-        return waitPredicate;
+    strokeStyle(lineWidth, color) {
+        this.canvas.lineWidth = lineWidth;
+        if (color)
+            this.canvas.strokeStyle = color.toCssHex();
+        return this;
     }
-    static frame() {
-        return Wait.seconds(0);
+    drawRect(x, y, width, height) {
+        this.canvas.fillRect(x, y, width, height);
+        this.canvas.strokeRect(x, y, width, height);
+        return this;
     }
-    static task(task) {
-        const waitPredicate = new TaskWaitPredicate();
-        waitPredicate.task = new Task(task);
-        return waitPredicate;
-    }
-    static while(predicate) {
-        const waitPredicate = new BooleanWaitPredicate();
-        waitPredicate.predicate = predicate;
-        return waitPredicate;
-    }
-    static animation(renderObject) {
-        const waitPredicate = new AnimationWaitPredicate();
-        waitPredicate.renderObject = renderObject;
-        return waitPredicate;
+    drawRoundedRect(x, y, width, height, radius) {
+        const canvas = this.canvas;
+        canvas.save();
+        canvas.beginPath();
+        canvas.moveTo(x, y + radius);
+        canvas.lineTo(x, y + height - radius);
+        canvas.quadraticCurveTo(x, y + height, x + radius, y + height);
+        canvas.lineTo(x + width - radius, y + height);
+        canvas.quadraticCurveTo(x + width, y + height, x + width, y + height - radius);
+        canvas.lineTo(x + width, y + radius);
+        canvas.quadraticCurveTo(x + width, y, x + width - radius, y);
+        canvas.lineTo(x + radius, y);
+        canvas.quadraticCurveTo(x, y, x, y + radius);
+        canvas.closePath();
+        canvas.fill();
+        canvas.stroke();
+        canvas.restore();
+        return this;
     }
 }
 //# sourceMappingURL=mechanism.js.map
