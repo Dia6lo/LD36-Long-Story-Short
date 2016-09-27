@@ -1,5 +1,4 @@
-﻿/// <reference path="Scene.ts"/>
-class SceneManager {
+﻿class SceneManager {
     currentScene: Scene;
 
     open<T extends Scene>(scene: { new (): T }) {

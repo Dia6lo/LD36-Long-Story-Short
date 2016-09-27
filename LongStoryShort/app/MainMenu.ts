@@ -1,8 +1,4 @@
-﻿/// <reference path="Scene.ts"/>
-/// <reference path="CaveMan.ts"/>
-/// <reference path="Campfire.ts"/>
-/// <reference path="Message.ts"/>
-class MainMenu extends Scene {
+﻿class MainMenu extends Scene {
     clouds = new Widget();
     cloudTexture = Texture.fromImage("assets/Cloud.png");
 

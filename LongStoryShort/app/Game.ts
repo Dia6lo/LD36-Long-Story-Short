@@ -1,6 +1,4 @@
-﻿/// <reference path="MainMenu.ts" />
-/// <reference path="SceneManager.ts"/>
-class Game extends Application {
+﻿class Game extends Application {
     sceneManager = new SceneManager();
 
     constructor() {
